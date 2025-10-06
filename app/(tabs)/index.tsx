@@ -25,7 +25,7 @@ export default function HomeScreen() {
   };
 
   const handleAdmin = () => {
-    Alert.alert('Admin', 'Accediendo al panel de administración');
+    router.push('/(tabs)/loginAdmin');
   };
 
   return (
@@ -60,13 +60,7 @@ export default function HomeScreen() {
           <IconSymbol name="archivebox.fill" size={28} color="#FF8C00" />
           <ThemedText style={styles.mainButtonText}>Inventario</ThemedText>
         </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.mainButton} onPress={handleReportes}>
-          <IconSymbol name="chart.bar.fill" size={28} color="#FF8C00" />
-          <ThemedText style={styles.mainButtonText}>Reportes</ThemedText>
-        </TouchableOpacity>
       </ThemedView>
-
     </ThemedView>
   );
 }
