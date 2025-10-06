@@ -1,60 +1,78 @@
+import { useEffect, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { Link, router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+// Conexión Supabase
+import { supabase } from '@/scripts/lib/supabase';
+
+
+
+
+
 
 export default function CrearOrdenScreen() {
   const { mesa } = useLocalSearchParams();
+  const [productos, setProductos] = useState<string[]>([]);
   const [productosSeleccionados, setProductosSeleccionados] = useState<string[]>([]);
   const { agregarOrden } = useOrdenes();
 
-  // Lista de productos disponibles
-  const productos = [
-    'Pollo Broaster',
-    'Pollo Asado',
-    'Pizza Hawaiana',
-    'Pizza Champiñones',
-    'Jugo de Borojó',
-    'Peto',
-    'Coca cola',
-    'Chontaduro'
-  ];
+
+// Cargar productos desde Supabase
+
+  useEffect(() => {
+    const obtenerProductos = async () => {
+      const { data, error } = await supabase
+        .from('productos')
+        .select('nombre'); // Solo queremos el nombre
+
+      if (error) {
+        console.error('Error cargando productos:', error);
+        Alert.alert('Error', 'No se pudieron cargar los productos.');
+      } else if (data) {
+        setProductos(data.map((item) => item.nombre));
+      }
+    };
+
+    obtenerProductos();
+  }, []);
+
+
+// Manejo de selección
 
   const handleToggleProducto = (producto: string) => {
-    setProductosSeleccionados(prev => {
-      if (prev.includes(producto)) {
-        return prev.filter(p => p !== producto);
-      } else {
-        return [...prev, producto];
-      }
-    });
+    setProductosSeleccionados((prev) =>
+      prev.includes(producto)
+        ? prev.filter((p) => p !== producto)
+        : [...prev, producto]
+    );
   };
+
+
+// Confirmar orden
 
   const handleConfirmarOrden = () => {
     if (productosSeleccionados.length > 0) {
-      // Guardar la orden en el contexto
       agregarOrden(mesa as string, productosSeleccionados);
-      
-      const listaProductos = productosSeleccionados.map((producto, index) => `${index + 1}. ${producto}`).join('\n');
-      const mensaje = `Orden para Mesa ${mesa}:\n\n${listaProductos}`;
-      
+
+      const listaProductos = productosSeleccionados
+        .map((producto, index) => `${index + 1}. ${producto}`)
+        .join('\n');
+
       Alert.alert(
         'Orden Confirmada',
-        mensaje,
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back()
-          }
-        ]
+        `Orden para Mesa ${mesa}:\n\n${listaProductos}`,
+        [{ text: 'OK', onPress: () => router.back() }]
       );
     } else {
-      Alert.alert('Error', 'Por favor selecciona al menos un producto');
+      Alert.alert('Error', 'Por favor selecciona al menos un producto.');
     }
   };
+
+
+// UI
 
   return (
     <ThemedView style={styles.container}>
@@ -73,14 +91,11 @@ export default function CrearOrdenScreen() {
         {/* Información de la mesa */}
         <ThemedView style={styles.mesaInfo}>
           <IconSymbol name="table.furniture" size={32} color="#FF8C00" />
-          <ThemedText style={styles.mesaText}>
-            Mesa {mesa}
-          </ThemedText>
+          <ThemedText style={styles.mesaText}>Mesa {mesa}</ThemedText>
         </ThemedView>
 
         {/* Lista de productos */}
         <ThemedView style={styles.productosContainer}>
-          {/* Lista de productos con checkboxes */}
           <ScrollView style={styles.listaProductos} showsVerticalScrollIndicator={false}>
             {productos.map((producto, index) => {
               const isSelected = productosSeleccionados.includes(producto);
@@ -92,10 +107,12 @@ export default function CrearOrdenScreen() {
                 >
                   <ThemedView style={styles.productoContent}>
                     <ThemedText style={styles.productoTexto}>{producto}</ThemedText>
-                    <ThemedView style={[
-                      styles.checkbox,
-                      isSelected && styles.checkboxSelected
-                    ]}>
+                    <ThemedView
+                      style={[
+                        styles.checkbox,
+                        isSelected && styles.checkboxSelected,
+                      ]}
+                    >
                       {isSelected && (
                         <IconSymbol name="checkmark" size={16} color="#fff" />
                       )}
@@ -109,31 +126,23 @@ export default function CrearOrdenScreen() {
 
         {/* Botones de acción */}
         <ThemedView style={styles.actionsContainer}>
-          <TouchableOpacity 
-            style={styles.confirmButton} 
-            onPress={handleConfirmarOrden}
-          >
+          <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmarOrden}>
             <IconSymbol name="checkmark.circle.fill" size={24} color="#fff" />
-            <ThemedText style={styles.confirmButtonText}>
-              Confirmar Orden
-            </ThemedText>
+            <ThemedText style={styles.confirmButtonText}>Confirmar Orden</ThemedText>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.cancelButton} 
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={styles.cancelButton} onPress={() => router.back()}>
             <IconSymbol name="xmark.circle.fill" size={24} color="#fff" />
-            <ThemedText style={styles.cancelButtonText}>
-              Cancelar
-            </ThemedText>
+            <ThemedText style={styles.cancelButtonText}>Cancelar</ThemedText>
           </TouchableOpacity>
         </ThemedView>
-
       </ThemedView>
     </ThemedView>
   );
 }
+
+
+// Estilos
 
 const styles = StyleSheet.create({
   container: {
@@ -161,7 +170,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 100, // Espacio para evitar que los botones sean tapados
+    paddingBottom: 100,
     gap: 30,
   },
   mesaInfo: {
@@ -174,9 +183,7 @@ const styles = StyleSheet.create({
     gap: 12,
     elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 3,
   },
   mesaText: {
     fontSize: 24,
@@ -189,17 +196,8 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 3,
     maxHeight: 450,
-  },
-  pregunta: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#8B4513',
-    textAlign: 'center',
-    marginBottom: 20,
   },
   listaProductos: {
     maxHeight: 350,
@@ -229,7 +227,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 2,
     borderColor: '#8B4513',
-    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -249,10 +246,6 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     gap: 12,
     elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
   },
   confirmButtonText: {
     color: '#fff',
@@ -263,12 +256,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#DC3545', // Rojo para cancelar
+    backgroundColor: '#DC3545',
     padding: 16,
     borderRadius: 15,
     gap: 12,
-    borderWidth: 2,
-    borderColor: '#DC3545',
   },
   cancelButtonText: {
     color: '#fff',
