@@ -2,10 +2,29 @@ import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
+import { router } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 
 export default function PedidosScreen() {
   const { ordenes, actualizarEstadoOrden, eliminarOrden } = useOrdenes();
+
+  // Calcular total de una orden (fallback para órdenes antiguas)
+  const calcularTotalOrden = (orden: Orden): number => {
+    if (orden.total) return orden.total;
+    
+    return orden.productos.reduce((total, producto) => {
+      const precioMatch = producto.match(/\$(\d+)/);
+      const cantidadMatch = producto.match(/X(\d+)/);
+      
+      if (precioMatch) {
+        const precioUnitario = parseInt(precioMatch[1]);
+        const cantidad = cantidadMatch ? parseInt(cantidadMatch[1]) : 1;
+        return total + (precioUnitario * cantidad);
+      }
+      
+      return total;
+    }, 0);
+  };
 
   const getEstadoColor = (estado: Orden['estado']) => {
     switch (estado) {
@@ -86,40 +105,83 @@ export default function PedidosScreen() {
     );
   };
 
-  const renderOrden = (orden: Orden) => (
-    <ThemedView key={orden.id} style={styles.ordenCard}>
-      <ThemedView style={styles.ordenHeader}>
-        <ThemedView style={styles.mesaInfo}>
-          <IconSymbol name="table.furniture" size={20} color="#FF8C00" />
-          <ThemedText style={styles.mesaTexto}>Mesa {orden.mesa}</ThemedText>
+  const renderOrden = (orden: Orden) => {
+    const totalOrden = calcularTotalOrden(orden);
+    
+    return (
+      <ThemedView key={orden.id} style={styles.ordenCard}>
+        <ThemedView style={styles.ordenHeader}>
+          <ThemedView style={styles.mesaInfo}>
+            <IconSymbol name="table.furniture" size={20} color="#FF8C00" />
+            <ThemedText style={styles.mesaTexto}>Mesa {orden.mesa}</ThemedText>
+          </ThemedView>
+          
+          <ThemedView style={[
+            styles.estadoBadge,
+            { backgroundColor: getEstadoColor(orden.estado) }
+          ]}>
+            <ThemedText style={styles.estadoTexto}>
+              {getEstadoTexto(orden.estado)}
+            </ThemedText>
+          </ThemedView>
         </ThemedView>
-        
-        <ThemedView style={[
-          styles.estadoBadge,
-          { backgroundColor: getEstadoColor(orden.estado) }
-        ]}>
-          <ThemedText style={styles.estadoTexto}>
-            {getEstadoTexto(orden.estado)}
+
+        {/* Total de la orden */}
+        <ThemedView style={styles.totalContainer}>
+          <ThemedText style={styles.totalLabel}>Total:</ThemedText>
+          <ThemedText style={styles.totalValor}>
+            ${totalOrden.toLocaleString('es-CO')}
           </ThemedText>
         </ThemedView>
-      </ThemedView>
 
       <ThemedView style={styles.productosContainer}>
         <ThemedText style={styles.productosTitulo}>Productos:</ThemedText>
-        {orden.productos.map((producto, index) => (
-          <ThemedText key={index} style={styles.productoItem}>
-            • {producto}
-          </ThemedText>
-        ))}
+        {orden.productos.map((producto, index) => {
+          // Separar la cantidad si existe (formato: "Producto (tamaño) $20000 X2")
+          const partes = producto.split(' X');
+          const productoConPrecio = partes[0]; // "Producto (tamaño) $20000"
+          const cantidad = partes[1];
+          
+          // Limpiar el nombre del producto (quitar precio)
+          const productoLimpio = productoConPrecio.split(' $')[0].trim(); // "Producto (tamaño)"
+          
+          return (
+            <ThemedView key={index} style={styles.productoItemContainer}>
+              <ThemedText style={styles.productoItem}>
+                • {productoLimpio}
+              </ThemedText>
+              {cantidad && (
+                <ThemedView style={styles.cantidadBadge}>
+                  <ThemedText style={styles.cantidadBadgeTexto}>
+                    X{cantidad}
+                  </ThemedText>
+                </ThemedView>
+              )}
+            </ThemedView>
+          );
+        })}
       </ThemedView>
 
       <ThemedView style={styles.ordenFooter}>
-        <ThemedText style={styles.fechaTexto}>
-          {orden.fechaCreacion.toLocaleTimeString('es-ES', {
-            hour: '2-digit',
-            minute: '2-digit'
-          })}
-        </ThemedText>
+        <ThemedView style={styles.horaContainer}>
+          <ThemedText style={styles.fechaTexto}>
+            {orden.fechaCreacion.toLocaleTimeString('es-ES', {
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </ThemedText>
+          
+          {/* Botón para agregar más productos */}
+          <TouchableOpacity
+            style={styles.agregarMasButton}
+            onPress={() => router.push({
+              pathname: '/crear-orden',
+              params: { mesa: orden.mesa }
+            })}
+          >
+            <IconSymbol name="plus.circle.fill" size={34} color="#4CAF50" />
+          </TouchableOpacity>
+        </ThemedView>
         
         <ThemedView style={styles.botonesContainer}>
           {orden.estado !== 'entregado' && (
@@ -147,7 +209,8 @@ export default function PedidosScreen() {
         </ThemedView>
       </ThemedView>
     </ThemedView>
-  );
+    );
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -254,6 +317,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  totalContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  totalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8B4513',
+  },
+  totalValor: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#28A745',
+  },
   productosContainer: {
     marginBottom: 12,
   },
@@ -263,19 +345,46 @@ const styles = StyleSheet.create({
     color: '#8B4513',
     marginBottom: 6,
   },
+  productoItemContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
   productoItem: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 2,
+    flex: 1,
+  },
+  cantidadBadge: {
+    backgroundColor: '#9C27B0',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  cantidadBadgeTexto: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#fff',
   },
   ordenFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  horaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   fechaTexto: {
     fontSize: 12,
     color: '#999',
+  },
+  agregarMasButton: {
+    padding: 8,
+    marginLeft: 10,
   },
   botonesContainer: {
     flexDirection: 'row',

@@ -1,20 +1,33 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
-import { useOrdenes } from '@/utilidades/context/OrdenesContext';
-import { ScrollView, StyleSheet } from 'react-native';
+import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
+import { useState } from 'react';
+import { ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 
 export default function ReportesScreen() {
-  const { ordenes } = useOrdenes();
+  const { ordenes, ordenesEntregadas } = useOrdenes();
+  const [ordenesExpandidas, setOrdenesExpandidas] = useState<Set<string>>(new Set());
+
+  // Calcular ganancias totales (suma de todas las órdenes entregadas)
+  const totalGanancias = ordenesEntregadas.reduce((total, orden) => {
+    return total + (orden.total || 0);
+  }, 0);
+
+  // Placeholder para gastos (por implementar después)
+  const totalGastos = 0;
+
+  // Calcular balance/utilidad
+  const balance = totalGanancias - totalGastos;
 
   // Calcular estadísticas básicas
-  const totalOrdenes = ordenes.length;
+  const totalOrdenes = ordenes.length + ordenesEntregadas.length;
   const ordenesCanceladas = ordenes.filter(o => o.estado === 'cancelado').length;
-  const ordenesEntregadas = ordenes.filter(o => o.estado === 'entregado').length;
+  const totalOrdenesEntregadas = ordenesEntregadas.length;
 
-  // Productos más pedidos
+  // Productos más pedidos (incluye órdenes actuales y entregadas)
   const productosCount: Record<string, number> = {};
-  ordenes.forEach(orden => {
+  [...ordenes, ...ordenesEntregadas].forEach(orden => {
     orden.productos.forEach(producto => {
       productosCount[producto] = (productosCount[producto] || 0) + 1;
     });
@@ -34,17 +47,144 @@ export default function ReportesScreen() {
     </ThemedView>
   );
 
-  const renderProductoMasPedido = (producto: string, cantidad: number, index: number) => (
-    <ThemedView key={producto} style={styles.productoItem}>
-      <ThemedView style={styles.productoRanking}>
-        <ThemedText style={styles.productoNumero}>#{index + 1}</ThemedText>
+  const renderProductoMasPedido = (producto: string, cantidad: number, index: number) => {
+    // Limpiar el nombre del producto (quitar precio y cantidad)
+    // Formato: "Pollo Asado (1/2) $20000 X4" → "Pollo Asado (1/2)"
+    const nombreLimpio = producto.split(' $')[0].trim();
+    
+    return (
+      <ThemedView key={producto} style={styles.productoItem}>
+        <ThemedView style={styles.productoRanking}>
+          <ThemedText style={styles.productoNumero}>#{index + 1}</ThemedText>
+        </ThemedView>
+        <ThemedView style={styles.productoInfo}>
+          <ThemedText style={styles.productoNombre}>{nombreLimpio}</ThemedText>
+          <ThemedText style={styles.productoCantidad}>{cantidad} pedidos</ThemedText>
+        </ThemedView>
+        {index === 0 && (
+          <ThemedText style={styles.coronaIcono}>👑</ThemedText>
+        )}
       </ThemedView>
-      <ThemedView style={styles.productoInfo}>
-        <ThemedText style={styles.productoNombre}>{producto}</ThemedText>
-        <ThemedText style={styles.productoCantidad}>{cantidad} pedidos</ThemedText>
+    );
+  };
+
+  // Toggle expandir/colapsar orden
+  const toggleOrdenExpandida = (ordenId: string) => {
+    setOrdenesExpandidas(prev => {
+      const nuevaSet = new Set(prev);
+      if (nuevaSet.has(ordenId)) {
+        nuevaSet.delete(ordenId);
+      } else {
+        nuevaSet.add(ordenId);
+      }
+      return nuevaSet;
+    });
+  };
+
+  // Calcular total de una orden (fallback para órdenes antiguas)
+  const calcularTotalOrden = (productos: string[]): number => {
+    return productos.reduce((total, producto) => {
+      // Formato nuevo: "Producto (tamaño) $20000 X2"
+      const precioMatch = producto.match(/\$(\d+)/);
+      const cantidadMatch = producto.match(/X(\d+)/);
+      
+      if (precioMatch) {
+        const precioUnitario = parseInt(precioMatch[1]);
+        const cantidad = cantidadMatch ? parseInt(cantidadMatch[1]) : 1;
+        return total + (precioUnitario * cantidad);
+      }
+      
+      return total;
+    }, 0);
+  };
+
+  const renderOrdenEntregada = (orden: Orden) => {
+    const isExpandida = ordenesExpandidas.has(orden.id);
+    // Usar total guardado o calcular si no existe (órdenes antiguas)
+    const totalVenta = orden.total || calcularTotalOrden(orden.productos);
+    
+    return (
+      <ThemedView key={orden.id} style={styles.ordenEntregadaCard}>
+        {/* Vista Compacta - Siempre visible */}
+        <ThemedView style={styles.ordenCompacta}>
+          <ThemedView style={styles.ordenCompactaRow}>
+            <ThemedView style={styles.mesaBadge}>
+              <IconSymbol name="table.furniture" size={16} color="#fff" />
+              <ThemedText style={styles.mesaBadgeTexto}>Mesa {orden.mesa}</ThemedText>
+            </ThemedView>
+            
+            <ThemedText style={styles.ordenTotalVenta}>
+              ${totalVenta.toLocaleString('es-CO')}
+            </ThemedText>
+          </ThemedView>
+
+          <ThemedText style={styles.ordenHora}>
+            {orden.fechaEntrega?.toLocaleTimeString('es-ES', {
+              hour: '2-digit',
+              minute: '2-digit'
+            })} - {orden.fechaEntrega?.toLocaleDateString('es-ES', {
+              day: '2-digit',
+              month: '2-digit'
+            })}
+          </ThemedText>
+        </ThemedView>
+
+        {/* Botón Detalles */}
+        <TouchableOpacity
+          style={styles.detallesButton}
+          onPress={() => toggleOrdenExpandida(orden.id)}
+          activeOpacity={0.7}
+        >
+          <ThemedText style={styles.detallesTexto}>Detalles</ThemedText>
+          <IconSymbol 
+            name={isExpandida ? "chevron.up" : "chevron.down"} 
+            size={18} 
+            color="#8B4513" 
+          />
+        </TouchableOpacity>
+
+        {/* Vista Expandida - Solo cuando está expandida */}
+        {isExpandida && (
+          <ThemedView style={styles.ordenExpandida}>
+            <ThemedView style={styles.divider} />
+            
+            <ThemedView style={styles.ordenProductos}>
+              <ThemedText style={styles.ordenProductosTitulo}>Productos:</ThemedText>
+              {orden.productos.map((producto, index) => {
+                // Separar cantidad si existe
+                const partes = producto.split(' X');
+                const productoConPrecio = partes[0]; // "Producto (tamaño) $20000"
+                const cantidad = partes[1];
+                
+                // Limpiar el nombre del producto (quitar precio)
+                const productoLimpio = productoConPrecio.split(' $')[0].trim(); // "Producto (tamaño)"
+                
+                return (
+                  <ThemedView key={index} style={styles.productoDetalleContainer}>
+                    <ThemedText style={styles.ordenProductoItem}>
+                      • {productoLimpio}
+                    </ThemedText>
+                    {cantidad && (
+                      <ThemedView style={styles.cantidadBadgeReporte}>
+                        <ThemedText style={styles.cantidadBadgeTexto}>
+                          X{cantidad}
+                        </ThemedText>
+                      </ThemedView>
+                    )}
+                  </ThemedView>
+                );
+              })}
+            </ThemedView>
+
+            <ThemedView style={styles.ordenFooter}>
+              <IconSymbol name="checkmark.circle.fill" size={16} color="#28A745" />
+              <ThemedText style={styles.ordenEstadoTexto}>Entregada</ThemedText>
+            </ThemedView>
+          </ThemedView>
+        )}
       </ThemedView>
-    </ThemedView>
-  );
+    );
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -62,13 +202,70 @@ export default function ReportesScreen() {
       </ThemedView>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Dashboard Financiero */}
+        <ThemedView style={styles.dashboardFinanciero}>
+          {/* Tarjeta de Ventas */}
+          <ThemedView style={styles.tarjetaGanancias}>
+            <ThemedView style={styles.tarjetaHeader}>
+              <IconSymbol name="arrow.up.circle.fill" size={32} color="#28A745" />
+              <ThemedText style={styles.tarjetaTitulo}>Ventas</ThemedText>
+            </ThemedView>
+            <ThemedText style={styles.tarjetaValor}>
+              ${totalGanancias.toLocaleString('es-CO')}
+            </ThemedText>
+            <ThemedView style={styles.tarjetaFooter}>
+              <IconSymbol name="checkmark.circle" size={14} color="#28A745" />
+              <ThemedText style={styles.tarjetaSubtexto}>
+                {totalOrdenesEntregadas} órdenes entregadas
+              </ThemedText>
+            </ThemedView>
+          </ThemedView>
+
+          {/* Tarjeta de Gastos */}
+          <ThemedView style={styles.tarjetaGastos}>
+            <ThemedView style={styles.tarjetaHeader}>
+              <IconSymbol name="arrow.down.circle.fill" size={32} color="#DC3545" />
+              <ThemedText style={styles.tarjetaTituloGastos}>Gastos</ThemedText>
+            </ThemedView>
+            <ThemedText style={styles.tarjetaValorGastos}>
+              ${totalGastos.toLocaleString('es-CO')}
+            </ThemedText>
+            <ThemedView style={styles.tarjetaFooter}>
+              <IconSymbol name="info.circle" size={14} color="#999" />
+              <ThemedText style={styles.tarjetaSubtextoGastos}>
+                Próximamente disponible
+              </ThemedText>
+            </ThemedView>
+          </ThemedView>
+
+          {/* Tarjeta de Balance/Utilidad */}
+          <ThemedView style={styles.tarjetaBalance}>
+            <ThemedView style={styles.tarjetaHeader}>
+              <IconSymbol name="chart.line.uptrend.xyaxis" size={30} color="#FF8C00" />
+              <ThemedText style={styles.tarjetaTituloBalance}>Balance</ThemedText>
+            </ThemedView>
+            <ThemedText style={styles.tarjetaValorBalance}>
+              ${balance.toLocaleString('es-CO')}
+            </ThemedText>
+            <ThemedView style={styles.balanceBarra}>
+              <ThemedView style={[styles.barraGanancias, { width: totalGastos === 0 ? '100%' : `${(totalGanancias / (totalGanancias + totalGastos)) * 100}%` }]} />
+            </ThemedView>
+            <ThemedView style={styles.balanceInfo}>
+              <ThemedText style={styles.balanceInfoTexto}>
+                <ThemedText style={styles.balanceGanancia}>▲ Ganancias Netas </ThemedText>
+                {totalGastos > 0 && <ThemedText style={styles.balanceGasto}>▼ Gastos</ThemedText>}
+              </ThemedText>
+            </ThemedView>
+          </ThemedView>
+        </ThemedView>
+
         {/* Estadísticas de Órdenes */}
         <ThemedView style={styles.section}>
           <ThemedText style={styles.sectionTitle}>Estado de Órdenes</ThemedText>
           <ThemedView style={styles.estadisticasGrid}>
             {renderEstadistica('Total', totalOrdenes, 'list.clipboard.fill', '#FF8C00')}
             {renderEstadistica('Canceladas', ordenesCanceladas, 'xmark.circle.fill', '#DC3545')}
-            {renderEstadistica('Entregadas', ordenesEntregadas, 'hand.raised.fill', '#28A745')}
+            {renderEstadistica('Entregadas', totalOrdenesEntregadas, 'checkmark.circle.fill', '#28A745')}
           </ThemedView>
         </ThemedView>
 
@@ -89,6 +286,26 @@ export default function ReportesScreen() {
               </ThemedText>
               <ThemedText style={styles.emptyStateSubtexto}>
                 Los reportes aparecerán cuando se creen órdenes
+              </ThemedText>
+            </ThemedView>
+          )}
+        </ThemedView>
+
+        {/* Historial de Órdenes Entregadas */}
+        <ThemedView style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>Historial de Órdenes Entregadas</ThemedText>
+          {ordenesEntregadas.length > 0 ? (
+            <ThemedView style={styles.ordenesEntregadasLista}>
+              {ordenesEntregadas.slice().reverse().map(renderOrdenEntregada)}
+            </ThemedView>
+          ) : (
+            <ThemedView style={styles.emptyState}>
+              <IconSymbol name="clock" size={48} color="#ccc" />
+              <ThemedText style={styles.emptyStateTexto}>
+                No hay órdenes entregadas aún
+              </ThemedText>
+              <ThemedText style={styles.emptyStateSubtexto}>
+                El historial aparecerá cuando se entreguen órdenes
               </ThemedText>
             </ThemedView>
           )}
@@ -134,6 +351,117 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  dashboardFinanciero: {
+    marginBottom: 20,
+  },
+  tarjetaGanancias: {
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderLeftWidth: 5,
+    borderLeftColor: '#28A745',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  tarjetaGastos: {
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderLeftWidth: 5,
+    borderLeftColor: '#DC3545',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  tarjetaBalance: {
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderLeftWidth: 5,
+    borderLeftColor: '#FF8C00',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  tarjetaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  tarjetaTitulo: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#28A745',
+  },
+  tarjetaTituloGastos: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#DC3545',
+  },
+  tarjetaTituloBalance: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FF8C00',
+  },
+  tarjetaValor: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#28A745',
+    marginBottom: 6,
+  },
+  tarjetaValorGastos: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#DC3545',
+    marginBottom: 6,
+  },
+  tarjetaValorBalance: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FF8C00',
+    marginBottom: 6,
+  },
+  tarjetaFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  tarjetaSubtexto: {
+    fontSize: 13,
+    color: '#28A745',
+    fontWeight: '500',
+  },
+  tarjetaSubtextoGastos: {
+    fontSize: 13,
+    color: '#999',
+    fontStyle: 'italic',
+  },
+  balanceBarra: {
+    height: 6,
+    backgroundColor: '#FFE0B2',
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  barraGanancias: {
+    height: '100%',
+    backgroundColor: '#28A745',
+    borderRadius: 8,
+  },
+  balanceInfo: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  balanceInfoTexto: {
+    fontSize: 12,
+  },
+  balanceGanancia: {
+    color: '#28A745',
+    fontWeight: 'bold',
+  },
+  balanceGasto: {
+    color: '#DC3545',
+    fontWeight: 'bold',
   },
   section: {
     marginBottom: 24,
@@ -189,6 +517,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
+    paddingRight: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
@@ -219,6 +548,10 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
+  coronaIcono: {
+    fontSize: 32,
+    marginLeft: 12,
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -235,5 +568,121 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 8,
     textAlign: 'center',
+  },
+  ordenesEntregadasLista: {
+    gap: 12,
+  },
+  ordenEntregadaCard: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: '#28A745',
+  },
+  ordenCompacta: {
+    marginBottom: 8,
+  },
+  ordenCompactaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  mesaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FF8C00',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  mesaBadgeTexto: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  ordenTotalVenta: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#28A745',
+  },
+  ordenHora: {
+    fontSize: 13,
+    color: '#999',
+  },
+  detallesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  detallesTexto: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8B4513',
+  },
+  ordenExpandida: {
+    marginTop: 12,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+    marginBottom: 12,
+  },
+  productoDetalleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  cantidadBadgeReporte: {
+    backgroundColor: '#9C27B0',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  cantidadBadgeTexto: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  ordenProductos: {
+    marginBottom: 12,
+  },
+  ordenProductosTitulo: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8B4513',
+    marginBottom: 6,
+  },
+  ordenProductoItem: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 2,
+  },
+  ordenFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  ordenEstadoTexto: {
+    fontSize: 13,
+    color: '#28A745',
+    fontWeight: '600',
   },
 });
