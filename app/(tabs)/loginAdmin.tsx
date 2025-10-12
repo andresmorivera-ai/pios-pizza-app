@@ -41,7 +41,7 @@ export default function LoginScreen() {
         setCargando(false);
         return;
       }
-
+ 
       //  Guardar usuario autenticado en almacenamiento local
       await AsyncStorage.setItem('usuario', JSON.stringify(data));
 

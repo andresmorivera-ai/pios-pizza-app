@@ -2,12 +2,59 @@ import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
-import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Alert, StyleSheet, TouchableOpacity } from 'react-native';
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
+  const [usuario, setUsuario] = useState<any>(null);
 
+  //  Cargar usuario desde AsyncStorage
+  const cargarUsuario = async () => {
+    const userData = await AsyncStorage.getItem('usuario');
+    if (userData) {
+      setUsuario(JSON.parse(userData));
+    } else {
+      const meseroDefault = {
+        id: 0,
+        nombre: 'Mesero',
+        correo: 'mesero@piospizza.com',
+        rol_id: 2,
+      };
+      await AsyncStorage.setItem('usuario', JSON.stringify(meseroDefault));
+      setUsuario(meseroDefault);
+    }
+  };
+
+  // Se ejecuta cada vez que la pantalla vuelve a estar activa
+  useFocusEffect(
+    useCallback(() => {
+      cargarUsuario();
+    }, [])
+  );
+
+  //  Cerrar sesión
+  const handleLogout = async () => {
+    await AsyncStorage.removeItem('usuario');
+    const meseroDefault = {
+      id: 0,
+      nombre: 'Mesero',
+      correo: 'mesero@piospizza.com',
+      rol_id: 2,
+    };
+    await AsyncStorage.setItem('usuario', JSON.stringify(meseroDefault));
+    setUsuario(meseroDefault);
+    Alert.alert('Sesión cerrada', 'Has cerrado sesión. Volviendo al usuario Mesero.');
+  };
+
+  //  Ir al login
+  const handleAdminLogin = () => {
+    router.push('/(tabs)/loginAdmin');
+  };
+
+  //  Acciones
   const handleStartOrder = () => {
     router.push('/iniciar-orden');
   };
@@ -21,23 +68,35 @@ export default function HomeScreen() {
   };
 
   const handleReportes = () => {
-    Alert.alert('Reportes', 'Navegando a la sección de reportes');
+    router.push('/(tabs)/reportes');
   };
 
-  const handleAdmin = () => {
-    router.push('/(tabs)/loginAdmin');
-  };
+  const esAdmin = usuario?.rol_id === 1;
+  const esMesero = usuario?.rol_id === 2;
 
   return (
     <ThemedView style={styles.container}>
-      {/* Header con Admin */}
+      {/* Header con Admin o Salir */}
       <ThemedView style={styles.header}>
         <ThemedText type="title" style={styles.welcomeText}>
-          Bienvenido a Pio's Pizza
+          Bienvenido a Pio's Pizza{usuario ? `, ${usuario.nombre}` : ''}
         </ThemedText>
-        <TouchableOpacity style={styles.adminButton} onPress={handleAdmin}>
-          <IconSymbol name="gearshape.fill" size={24} color="#fff" />
-          <ThemedText style={styles.adminText}>Admin</ThemedText>
+
+        <TouchableOpacity
+          style={[
+            styles.adminButton,
+            esAdmin ? { backgroundColor: '#B22222' } : {},
+          ]}
+          onPress={esAdmin ? handleLogout : handleAdminLogin}
+        >
+          <IconSymbol
+            name={esAdmin ? 'arrow.backward.circle.fill' : 'gearshape.fill'}
+            size={24}
+            color="#fff"
+          />
+          <ThemedText style={styles.adminText}>
+            {esAdmin ? 'Salir' : 'Admin'}
+          </ThemedText>
         </TouchableOpacity>
       </ThemedView>
 
@@ -49,26 +108,39 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </ThemedView>
 
-      {/* Botones de navegación principal */}
+      {/*  Botones de navegación */}
       <ThemedView style={styles.mainButtonsContainer}>
+        {/*  Pedidos → Visible para todos */}
         <TouchableOpacity style={styles.mainButton} onPress={handlePedidos}>
           <IconSymbol name="list.clipboard.fill" size={28} color="#FF8C00" />
           <ThemedText style={styles.mainButtonText}>Pedidos</ThemedText>
         </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.mainButton} onPress={handleInventario}>
-          <IconSymbol name="archivebox.fill" size={28} color="#FF8C00" />
-          <ThemedText style={styles.mainButtonText}>Inventario</ThemedText>
-        </TouchableOpacity>
+
+        {/* Solo Admin → Inventario */}
+        {esAdmin && (
+          <TouchableOpacity style={styles.mainButton} onPress={handleInventario}>
+            <IconSymbol name="archivebox.fill" size={28} color="#FF8C00" />
+            <ThemedText style={styles.mainButtonText}>Inventario</ThemedText>
+          </TouchableOpacity>
+        )}
+
+        {/*  Solo Admin → Reportes */}
+        {esAdmin && (
+          <TouchableOpacity style={styles.mainButton} onPress={handleReportes}>
+            <IconSymbol name="chart.bar.fill" size={28} color="#FF8C00" />
+            <ThemedText style={styles.mainButtonText}>Reportes</ThemedText>
+          </TouchableOpacity>
+        )}
       </ThemedView>
     </ThemedView>
   );
 }
 
+//  Estilos
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFF8DC', // Cream background
+    backgroundColor: '#FFF8DC',
   },
   header: {
     flexDirection: 'row',
@@ -79,15 +151,15 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   welcomeText: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#8B4513', // Saddle brown
+    color: '#8B4513',
     flex: 1,
   },
   adminButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#D2691E', // Chocolate
+    backgroundColor: '#D2691E',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -105,7 +177,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   startOrderButton: {
-    backgroundColor: '#FF8C00', // Dark Orange
+    backgroundColor: '#FF8C00',
     paddingVertical: 20,
     paddingHorizontal: 40,
     borderRadius: 25,
