@@ -1,21 +1,18 @@
-import { useState } from 'react';
-import { Alert, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
-import { router } from 'expo-router';
 import { supabase } from '@/scripts/lib/supabase';
-
-// Componente principal
+import AsyncStorage from '@react-native-async-storage/async-storage'; // para guardar usuario localmente
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { Alert, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 
 export default function LoginScreen() {
   const [correo, setCorreo] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [cargando, setCargando] = useState(false);
 
-  
-  // Función de inicio de sesión
-  
+  //  Función de inicio de sesión
   const handleLogin = async () => {
     if (!correo || !contrasena) {
       Alert.alert('Error', 'Por favor ingresa tu correo y contraseña.');
@@ -25,6 +22,7 @@ export default function LoginScreen() {
     setCargando(true);
 
     try {
+      // Buscar usuario por correo
       const { data, error } = await supabase
         .from('usuarios')
         .select('id, nombre, correo, contrasena, rol_id')
@@ -37,15 +35,19 @@ export default function LoginScreen() {
         return;
       }
 
+      // Validar contraseña
       if (data.contrasena !== contrasena) {
         Alert.alert('Error', 'Contraseña incorrecta.');
         setCargando(false);
         return;
       }
 
-      // Login exitoso
-      
-      router.push('/(tabs)/indexadmin'); // Puedes cambiar esta ruta según tu flujo
+      //  Guardar usuario autenticado en almacenamiento local
+      await AsyncStorage.setItem('usuario', JSON.stringify(data));
+
+      //  Redirigir al index principal (independiente del rol)
+      router.push('/(tabs)'); 
+
     } catch (e) {
       Alert.alert('Error', 'No se pudo conectar al servidor.');
       console.error('Error de conexión:', e);
@@ -54,25 +56,21 @@ export default function LoginScreen() {
     }
   };
 
-    
-    // Interfaz
-    
-    return (
-        <ThemedView style={styles.container}>
+  //  Interfaz
+  return (
+    <ThemedView style={styles.container}>
+      <ThemedView style={[styles.header, { backgroundColor: 'transparent' }]}>
+        <IconSymbol name="flame.fill" size={50} color="#FF8C00" />
+        <ThemedText type="title" style={[styles.title, { backgroundColor: 'transparent' }]}>
+          Login
+        </ThemedText>
+      </ThemedView>
 
-            <ThemedView style={[styles.header, { backgroundColor: 'transparent' }]}>
-                <IconSymbol name="flame.fill" size={50} color="#FF8C00" />
-                <ThemedText type="title" style={[styles.title, { backgroundColor: 'transparent' }]}>
-                    Login Admin
-                </ThemedText>
-            </ThemedView>
-
-            {/* Formulario */}
-            <ThemedView style={styles.formContainer}>
-                <ThemedText style={styles.label}>Correo electrónico</ThemedText>
+      <ThemedView style={styles.formContainer}>
+        <ThemedText style={styles.label}>Correo electrónico</ThemedText>
         <TextInput
           style={styles.input}
-          placeholder="ejemplo@correo.com" 
+          placeholder="ejemplo@correo.com"
           placeholderTextColor="#B5651D"
           keyboardType="email-address"
           autoCapitalize="none"
@@ -105,9 +103,7 @@ export default function LoginScreen() {
   );
 }
 
-
-// Estilos
-
+//  Estilos
 const styles = StyleSheet.create({
   container: {
     flex: 1,
