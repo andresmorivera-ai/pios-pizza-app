@@ -3,6 +3,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+
+import { AuthProvider } from '@/utilidades/context/AuthContext';
 import { OrdenesProvider } from '@/utilidades/context/OrdenesContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
 
@@ -14,6 +16,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
+    <AuthProvider>
     <OrdenesProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <Stack>
@@ -26,5 +29,6 @@ export default function RootLayout() {
         <StatusBar style="auto" />
       </ThemeProvider>
     </OrdenesProvider>
+    </AuthProvider>
   );
 }
