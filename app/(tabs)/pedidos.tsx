@@ -145,11 +145,19 @@ export default function PedidosScreen() {
           // Limpiar el nombre del producto (quitar precio)
           const productoLimpio = productoConPrecio.split(' $')[0].trim(); // "Producto (tamaño)"
           
+          // Verificar si este producto es nuevo
+          const esProductoNuevo = orden.productosNuevos?.includes(index) || false;
+          
           return (
             <ThemedView key={index} style={styles.productoItemContainer}>
-              <ThemedText style={styles.productoItem}>
-                • {productoLimpio}
-              </ThemedText>
+              <ThemedView style={styles.productoItemHeader}>
+                <ThemedText style={styles.productoItem}>
+                  • {productoLimpio}
+                </ThemedText>
+                {esProductoNuevo && (
+                  <ThemedText style={styles.nuevoTexto}>NUEVO!</ThemedText>
+                )}
+              </ThemedView>
               {cantidad && (
                 <ThemedView style={styles.cantidadBadge}>
                   <ThemedText style={styles.cantidadBadgeTexto}>
@@ -350,6 +358,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 4,
+  },
+  productoItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  nuevoTexto: {
+    color: '#FF0000',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
   productoItem: {
     fontSize: 14,

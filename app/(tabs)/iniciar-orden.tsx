@@ -10,7 +10,7 @@ export default function IniciarOrdenScreen() {
   };
 
   const handleManual = () => {
-    router.push('/seleccionar-mesa');
+    router.push('/(tabs)/seleccionar-mesa');
   };
 
   return (

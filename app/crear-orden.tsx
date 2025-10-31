@@ -28,6 +28,7 @@ interface ProductoSeleccionado {
   precio: number;
   cantidad: number;
   descripcion?: string;
+  esNuevo?: boolean; // Flag para productos agregados durante actualización
 }
 
 
@@ -95,6 +96,7 @@ export default function CrearOrdenScreen() {
           tamano: tamanoMatch ? tamanoMatch[1] : '',
           precio: precioMatch ? parseInt(precioMatch[1]) : 0,
           cantidad: cantidadMatch ? parseInt(cantidadMatch[1]) : 1,
+          esNuevo: false // Los productos existentes no son nuevos
         };
       });
       
@@ -174,9 +176,34 @@ export default function CrearOrdenScreen() {
         tamano: tamanoOpcion.nombre,
         precio: tamanoOpcion.precio || productoParaTamano.precio,
         cantidad: 1,
-        descripcion: variante.descripcion
+        descripcion: variante.descripcion,
+        esNuevo: !!ordenEnCurso // Si hay orden en curso, es un producto nuevo
       };
-      setProductosSeleccionados(prev => [...prev, productoNuevo]);
+      
+      setProductosSeleccionados(prev => {
+        // Si hay orden en curso, siempre agregar como nuevo producto (no sumar cantidades)
+        if (ordenEnCurso) {
+          return [...prev, productoNuevo];
+        }
+        
+        // Si es orden nueva, usar la lógica de suma de cantidades
+        const productoExistente = prev.find(p => 
+          p.nombre === productoNuevo.nombre && p.tamano === productoNuevo.tamano
+        );
+        
+        if (productoExistente) {
+          // Si existe, incrementar la cantidad
+          return prev.map(p => 
+            p.nombre === productoNuevo.nombre && p.tamano === productoNuevo.tamano
+              ? { ...p, cantidad: p.cantidad + 1 }
+              : p
+          );
+        } else {
+          // Si no existe, agregar como nuevo producto
+          return [...prev, productoNuevo];
+        }
+      });
+      
       setModalVisible(false);
       setProductoParaTamano(null);
       setVarianteSeleccionada(null);
@@ -185,22 +212,60 @@ export default function CrearOrdenScreen() {
 
   // Incrementar cantidad
   const handleIncrementarCantidad = (index: number) => {
-    setProductosSeleccionados(prev =>
-      prev.map((producto, i) =>
-        i === index ? { ...producto, cantidad: producto.cantidad + 1 } : producto
-      )
-    );
+    setProductosSeleccionados(prev => {
+      const producto = prev[index];
+      
+      // Si hay orden en curso (actualización) Y el producto NO es nuevo, agregar como nuevo producto
+      if (ordenEnCurso && !producto.esNuevo) {
+        const productoNuevo: ProductoSeleccionado = {
+          ...producto,
+          cantidad: 1,
+          esNuevo: true
+        };
+        return [...prev, productoNuevo];
+      }
+      
+      // Si es orden nueva O el producto ya es nuevo, usar la lógica normal de incrementar cantidad
+      return prev.map((p, i) =>
+        i === index ? { ...p, cantidad: p.cantidad + 1 } : p
+      );
+    });
   };
 
   // Decrementar cantidad
   const handleDecrementarCantidad = (index: number) => {
-    setProductosSeleccionados(prev =>
-      prev.map((producto, i) =>
-        i === index && producto.cantidad > 1
-          ? { ...producto, cantidad: producto.cantidad - 1 }
-          : producto
-      )
-    );
+    setProductosSeleccionados(prev => {
+      const producto = prev[index];
+      
+      // Si hay orden en curso (actualización) Y el producto NO es nuevo, eliminar el último producto nuevo del mismo tipo
+      if (ordenEnCurso && !producto.esNuevo) {
+        // Buscar el último producto nuevo del mismo tipo (mismo nombre y tamaño)
+        const productosDelMismoTipo = prev.filter((p, i) => 
+          i > index && p.nombre === producto.nombre && p.tamano === producto.tamano && p.esNuevo
+        );
+        
+        if (productosDelMismoTipo.length > 0) {
+          // Encontrar el índice del último producto nuevo del mismo tipo
+          const ultimoIndice = prev.findLastIndex((p, i) => 
+            i > index && p.nombre === producto.nombre && p.tamano === producto.tamano && p.esNuevo
+          );
+          
+          if (ultimoIndice !== -1) {
+            return prev.filter((_, i) => i !== ultimoIndice);
+          }
+        }
+        
+        // Si no hay productos nuevos del mismo tipo, no hacer nada
+        return prev;
+      }
+      
+      // Si es orden nueva O el producto ya es nuevo, usar la lógica normal de decrementar cantidad
+      return prev.map((p, i) =>
+        i === index && p.cantidad > 1
+          ? { ...p, cantidad: p.cantidad - 1 }
+          : p
+      );
+    });
   };
 
   // Eliminar producto de la selección
@@ -262,7 +327,7 @@ export default function CrearOrdenScreen() {
     <ThemedView style={styles.container}>
       {/* Header */}
       <ThemedView style={styles.header}>
-        <Link href="/seleccionar-mesa" style={styles.backButton}>
+        <Link href="/(tabs)/seleccionar-mesa" style={styles.backButton}>
           <IconSymbol name="chevron.left" size={24} color="#8B4513" />
         </Link>
         <ThemedText type="title" style={styles.title}>
@@ -350,7 +415,9 @@ export default function CrearOrdenScreen() {
               return (
                 <ThemedView key={index} style={styles.seleccionadoItem}>
                   <ThemedView style={styles.seleccionadoInfo}>
-                    <ThemedText style={styles.seleccionadoNombre}>{producto.nombre}</ThemedText>
+                    <ThemedView style={styles.seleccionadoHeader}>
+                      <ThemedText style={styles.seleccionadoNombre}>{producto.nombre}</ThemedText>
+                    </ThemedView>
                     <ThemedText style={styles.seleccionadoTamano}>
                       {producto.tamano} - ${producto.precio.toLocaleString('es-CO')} c/u
                     </ThemedText>
@@ -378,12 +445,20 @@ export default function CrearOrdenScreen() {
                       </TouchableOpacity>
                     </ThemedView>
                     
-                    <TouchableOpacity
-                      style={styles.eliminarButton}
-                      onPress={() => handleEliminarProducto(index)}
-                    >
-                      <IconSymbol name="trash" size={20} color="#DC3545" />
-                    </TouchableOpacity>
+                    <ThemedView style={styles.accionesDerecha}>
+                      {producto.esNuevo && (
+                        <ThemedView style={styles.nuevoBadge}>
+                          <ThemedText style={styles.nuevoBadgeText}>NUEVO!</ThemedText>
+                        </ThemedView>
+                      )}
+                      
+                      <TouchableOpacity
+                        style={styles.eliminarButton}
+                        onPress={() => handleEliminarProducto(index)}
+                      >
+                        <IconSymbol name="trash" size={20} color="#DC3545" />
+                      </TouchableOpacity>
+                    </ThemedView>
                   </ThemedView>
                 </ThemedView>
               );
@@ -661,6 +736,23 @@ const styles = StyleSheet.create({
   seleccionadoInfo: {
     flex: 1,
   },
+  seleccionadoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  nuevoBadge: {
+    backgroundColor: '#FF6B35',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  nuevoBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
   seleccionadoNombre: {
     fontSize: 16,
     fontWeight: '600',
@@ -681,6 +773,11 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 8,
     alignItems: 'flex-end',
+  },
+  accionesDerecha: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   cantidadContainer: {
     flexDirection: 'row',

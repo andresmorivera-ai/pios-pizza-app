@@ -9,8 +9,11 @@ export default function ReportesScreen() {
   const { ordenes, ordenesEntregadas } = useOrdenes();
   const [ordenesExpandidas, setOrdenesExpandidas] = useState<Set<string>>(new Set());
 
-  // Calcular ganancias totales (suma de todas las órdenes entregadas)
-  const totalGanancias = ordenesEntregadas.reduce((total, orden) => {
+  // Filtrar solo órdenes que fueron pagadas (tienen método de pago)
+  const ordenesPagadas = ordenesEntregadas.filter(orden => orden.metodoPago);
+
+  // Calcular ganancias totales (suma de todas las órdenes pagadas)
+  const totalGanancias = ordenesPagadas.reduce((total, orden) => {
     return total + (orden.total || 0);
   }, 0);
 
@@ -23,7 +26,7 @@ export default function ReportesScreen() {
   // Calcular estadísticas básicas
   const totalOrdenes = ordenes.length + ordenesEntregadas.length;
   const ordenesCanceladas = ordenes.filter(o => o.estado === 'cancelado').length;
-  const totalOrdenesEntregadas = ordenesEntregadas.length;
+  const totalOrdenesPagadas = ordenesPagadas.length;
 
   // Productos más pedidos (incluye órdenes actuales y entregadas)
   const productosCount: Record<string, number> = {};
@@ -36,6 +39,22 @@ export default function ReportesScreen() {
   const productosMasPedidos = Object.entries(productosCount)
     .sort(([,a], [,b]) => b - a)
     .slice(0, 5);
+
+  // Función para obtener información del método de pago
+  const getMetodoPagoInfo = (metodoPago?: string) => {
+    switch (metodoPago) {
+      case 'daviplata':
+        return { nombre: 'Daviplata', color: '#FF6B35', icono: 'phone.fill' };
+      case 'nequi':
+        return { nombre: 'Nequi', color: '#00BFA5', icono: 'phone.fill' };
+      case 'efectivo':
+        return { nombre: 'Efectivo', color: '#4CAF50', icono: 'banknote.fill' };
+      case 'tarjeta':
+        return { nombre: 'Tarjeta', color: '#2196F3', icono: 'creditcard.fill' };
+      default:
+        return { nombre: 'No especificado', color: '#999', icono: 'questionmark.circle' };
+    }
+  };
 
   const renderEstadistica = (titulo: string, valor: number, icono: string, color: string) => (
     <ThemedView key={titulo} style={[styles.estadisticaCard, { borderLeftColor: color }]}>
@@ -102,6 +121,7 @@ export default function ReportesScreen() {
     const isExpandida = ordenesExpandidas.has(orden.id);
     // Usar total guardado o calcular si no existe (órdenes antiguas)
     const totalVenta = orden.total || calcularTotalOrden(orden.productos);
+    const metodoPagoInfo = getMetodoPagoInfo(orden.metodoPago);
     
     return (
       <ThemedView key={orden.id} style={styles.ordenEntregadaCard}>
@@ -113,20 +133,32 @@ export default function ReportesScreen() {
               <ThemedText style={styles.mesaBadgeTexto}>Mesa {orden.mesa}</ThemedText>
             </ThemedView>
             
+            {/* ID de Venta */}
+            {orden.idVenta && (
+              <ThemedText style={styles.idVentaTexto}>ID: {orden.idVenta}</ThemedText>
+            )}
+            
             <ThemedText style={styles.ordenTotalVenta}>
               ${totalVenta.toLocaleString('es-CO')}
             </ThemedText>
           </ThemedView>
 
-          <ThemedText style={styles.ordenHora}>
-            {orden.fechaEntrega?.toLocaleTimeString('es-ES', {
-              hour: '2-digit',
-              minute: '2-digit'
-            })} - {orden.fechaEntrega?.toLocaleDateString('es-ES', {
-              day: '2-digit',
-              month: '2-digit'
-            })}
-          </ThemedText>
+          <ThemedView style={styles.ordenInfoRow}>
+            <ThemedText style={styles.ordenHora}>
+              {orden.fechaEntrega?.toLocaleTimeString('es-ES', {
+                hour: '2-digit',
+                minute: '2-digit'
+              })} - {orden.fechaEntrega?.toLocaleDateString('es-ES', {
+                day: '2-digit',
+                month: '2-digit'
+              })}
+            </ThemedText>
+            
+            <ThemedView style={[styles.metodoPagoBadge, { backgroundColor: metodoPagoInfo.color }]}>
+              <IconSymbol name={metodoPagoInfo.icono as any} size={14} color="#fff" />
+              <ThemedText style={styles.metodoPagoTexto}>{metodoPagoInfo.nombre}</ThemedText>
+            </ThemedView>
+          </ThemedView>
         </ThemedView>
 
         {/* Botón Detalles */}
@@ -216,7 +248,7 @@ export default function ReportesScreen() {
             <ThemedView style={styles.tarjetaFooter}>
               <IconSymbol name="checkmark.circle" size={14} color="#28A745" />
               <ThemedText style={styles.tarjetaSubtexto}>
-                {totalOrdenesEntregadas} órdenes entregadas
+                {totalOrdenesPagadas} órdenes pagadas
               </ThemedText>
             </ThemedView>
           </ThemedView>
@@ -265,7 +297,7 @@ export default function ReportesScreen() {
           <ThemedView style={styles.estadisticasGrid}>
             {renderEstadistica('Total', totalOrdenes, 'list.clipboard.fill', '#FF8C00')}
             {renderEstadistica('Canceladas', ordenesCanceladas, 'xmark.circle.fill', '#DC3545')}
-            {renderEstadistica('Entregadas', totalOrdenesEntregadas, 'checkmark.circle.fill', '#28A745')}
+            {renderEstadistica('Pagadas', totalOrdenesPagadas, 'checkmark.circle.fill', '#28A745')}
           </ThemedView>
         </ThemedView>
 
@@ -291,21 +323,21 @@ export default function ReportesScreen() {
           )}
         </ThemedView>
 
-        {/* Historial de Órdenes Entregadas */}
+        {/* Historial de Ventas */}
         <ThemedView style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Historial de Órdenes Entregadas</ThemedText>
-          {ordenesEntregadas.length > 0 ? (
+          <ThemedText style={styles.sectionTitle}>Historial de Ventas</ThemedText>
+          {ordenesPagadas.length > 0 ? (
             <ThemedView style={styles.ordenesEntregadasLista}>
-              {ordenesEntregadas.slice().reverse().map(renderOrdenEntregada)}
+              {ordenesPagadas.slice().reverse().map(renderOrdenEntregada)}
             </ThemedView>
           ) : (
             <ThemedView style={styles.emptyState}>
-              <IconSymbol name="clock" size={48} color="#ccc" />
+              <IconSymbol name="creditcard" size={48} color="#ccc" />
               <ThemedText style={styles.emptyStateTexto}>
-                No hay órdenes entregadas aún
+                No hay ventas registradas aún
               </ThemedText>
               <ThemedText style={styles.emptyStateSubtexto}>
-                El historial aparecerá cuando se entreguen órdenes
+                El historial aparecerá cuando se procesen pagos
               </ThemedText>
             </ThemedView>
           )}
@@ -612,6 +644,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#28A745',
   },
+  idVentaTexto: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'center',
+  },
   ordenHora: {
     fontSize: 13,
     color: '#999',
@@ -684,5 +726,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#28A745',
     fontWeight: '600',
+  },
+  ordenInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  metodoPagoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  metodoPagoTexto: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
