@@ -1,13 +1,21 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { useAuth } from '@/utilidades/context/AuthContext';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { router } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 
+
 export default function PedidosScreen() {
   const { ordenes, actualizarEstadoOrden, eliminarOrden } = useOrdenes();
+  const { usuario, logout } = useAuth(); 
+  const esAdmin = usuario?.rol_id === 1;
+  const esMesero = usuario?.rol_id === 2;
+  const esCajera = usuario?.rol_id === 3;
+  const esCocinera = usuario?.rol_id === 4
 
+  const ocultarBoton = esAdmin || esCajera || esCocinera;
   // Calcular total de una orden (fallback para órdenes antiguas)
   const calcularTotalOrden = (orden: Orden): number => {
     if (orden.total) return orden.total;
@@ -28,6 +36,8 @@ export default function PedidosScreen() {
 
   const getEstadoColor = (estado: Orden['estado']) => {
     switch (estado) {
+      case 'disponible':
+        return '#9E9E9E';
       case 'pendiente':
         return '#FF8C00';
       case 'en_preparacion':
@@ -35,7 +45,9 @@ export default function PedidosScreen() {
       case 'listo':
         return '#4CAF50';
       case 'entregado':
-        return '#9E9E9E';
+        return '#9C27B0';
+      case 'pago':
+        return '#28A745';
       default:
         return '#FF8C00';
     }
@@ -43,6 +55,8 @@ export default function PedidosScreen() {
 
   const getEstadoTexto = (estado: Orden['estado']) => {
     switch (estado) {
+      case 'disponible':
+        return 'Disponible';
       case 'pendiente':
         return 'Pendiente';
       case 'en_preparacion':
@@ -51,6 +65,8 @@ export default function PedidosScreen() {
         return 'Listo';
       case 'entregado':
         return 'Entregado';
+      case 'pago':
+        return 'Pagado';
       default:
         return 'Pendiente';
     }
@@ -72,6 +88,10 @@ export default function PedidosScreen() {
       case 'listo':
         nuevoEstado = 'entregado';
         tituloBoton = 'Marcar como Entregado';
+        break;
+      case 'entregado':
+        nuevoEstado = 'pago';
+        tituloBoton = 'Registrar Pago';
         break;
       default:
         return;
@@ -184,7 +204,7 @@ export default function PedidosScreen() {
         </ThemedView>
         
         <ThemedView style={styles.botonesContainer}>
-          {orden.estado !== 'entregado' && (
+          {orden.estado !== 'pago' && (
             <TouchableOpacity 
               style={[
                 styles.accionButton,
@@ -194,8 +214,12 @@ export default function PedidosScreen() {
             >
               <IconSymbol name="checkmark.circle.fill" size={16} color="#fff" />
               <ThemedText style={styles.accionButtonTexto}>
-                {orden.estado === 'pendiente' ? 'Comenzar' : 
-                 orden.estado === 'en_preparacion' ? 'Listo' : 'Entregar'}
+                {
+                 
+                 orden.estado === 'pendiente' ? 'Comenzar' : 
+                 orden.estado === 'en_preparacion' ? 'Listo' : 
+                 orden.estado === 'listo' ? 'Entregar' : 'Pagar'
+                }
               </ThemedText>
             </TouchableOpacity>
           )}
@@ -278,7 +302,7 @@ const styles = StyleSheet.create({
   listaOrdenes: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 20, // Espacio adicional para el primer recuadro
+    paddingTop: 20, 
   },
   ordenCard: {
     backgroundColor: '#fff',

@@ -1,53 +1,14 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { useAuth } from '@/utilidades/context/AuthContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { router } from 'expo-router';
 import { Alert, StyleSheet, TouchableOpacity } from 'react-native';
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
-  const [usuario, setUsuario] = useState<any>(null);
-
-  //  Cargar usuario desde AsyncStorage
-  const cargarUsuario = async () => {
-    const userData = await AsyncStorage.getItem('usuario');
-    if (userData) {
-      setUsuario(JSON.parse(userData));
-    } else {
-      const meseroDefault = {
-        id: 0,
-        nombre: 'Mesero',
-        correo: 'mesero@piospizza.com',
-        rol_id: 2,
-      };
-      await AsyncStorage.setItem('usuario', JSON.stringify(meseroDefault));
-      setUsuario(meseroDefault);
-    }
-  };
-
-  // Se ejecuta cada vez que la pantalla vuelve a estar activa
-  useFocusEffect(
-    useCallback(() => {
-      cargarUsuario();
-    }, [])
-  );
-
-  //  Cerrar sesión
-  const handleLogout = async () => {
-    await AsyncStorage.removeItem('usuario');
-    const meseroDefault = {
-      id: 0,
-      nombre: 'Mesero',
-      correo: 'mesero@piospizza.com',
-      rol_id: 2,
-    };
-    await AsyncStorage.setItem('usuario', JSON.stringify(meseroDefault));
-    setUsuario(meseroDefault);
-    Alert.alert('Sesión cerrada', 'Has cerrado sesión. Volviendo al usuario Mesero.');
-  };
+  const { usuario, logout } = useAuth(); 
 
   //  Ir al login
   const handleAdminLogin = () => {
@@ -55,24 +16,18 @@ export default function HomeScreen() {
   };
 
   //  Acciones
-  const handleStartOrder = () => {
-    router.push('/iniciar-orden');
-  };
-
-  const handlePedidos = () => {
-    router.push('/pedidos');
-  };
-
-  const handleInventario = () => {
-    Alert.alert('Inventario', 'Navegando a la sección de inventario');
-  };
-
-  const handleReportes = () => {
-    router.push('/(tabs)/reportes');
-  };
+  const handleStartOrder = () => router.push('/iniciar-orden');
+  const handlePedidos = () => router.push('/pedidos');
+  const handleInventario = () => Alert.alert('Inventario', 'Navegando a la sección de inventario');
+  const handleReportes = () => router.push('/(tabs)/reportes');
 
   const esAdmin = usuario?.rol_id === 1;
   const esMesero = usuario?.rol_id === 2;
+  const esCajera = usuario?.rol_id === 3;
+  const esCocinera = usuario?.rol_id === 4;
+
+  //  Mostrar botón de salir si es admin, cajera o cocinera
+  const mostrarSalir = esAdmin || esCajera || esCocinera;
 
   return (
     <ThemedView style={styles.container}>
@@ -85,17 +40,17 @@ export default function HomeScreen() {
         <TouchableOpacity
           style={[
             styles.adminButton,
-            esAdmin ? { backgroundColor: '#B22222' } : {},
+            mostrarSalir ? { backgroundColor: '#B22222' } : {},
           ]}
-          onPress={esAdmin ? handleLogout : handleAdminLogin}
+          onPress={mostrarSalir ? logout : handleAdminLogin} // usa logout del contexto
         >
           <IconSymbol
-            name={esAdmin ? 'arrow.backward.circle.fill' : 'gearshape.fill'}
+            name={mostrarSalir ? 'arrow.backward.circle.fill' : 'gearshape.fill'}
             size={24}
             color="#fff"
           />
           <ThemedText style={styles.adminText}>
-            {esAdmin ? 'Salir' : 'Admin'}
+            {mostrarSalir ? 'Salir' : 'Login'}
           </ThemedText>
         </TouchableOpacity>
       </ThemedView>
@@ -108,9 +63,9 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </ThemedView>
 
-      {/*  Botones de navegación */}
+      {/* Botones de navegación */}
       <ThemedView style={styles.mainButtonsContainer}>
-        {/*  Pedidos → Visible para todos */}
+        {/* Pedidos → Visible para todos */}
         <TouchableOpacity style={styles.mainButton} onPress={handlePedidos}>
           <IconSymbol name="list.clipboard.fill" size={28} color="#FF8C00" />
           <ThemedText style={styles.mainButtonText}>Pedidos</ThemedText>
@@ -124,7 +79,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        {/*  Solo Admin → Reportes */}
+        {/* Solo Admin → Reportes */}
         {esAdmin && (
           <TouchableOpacity style={styles.mainButton} onPress={handleReportes}>
             <IconSymbol name="chart.bar.fill" size={28} color="#FF8C00" />
@@ -136,7 +91,7 @@ export default function HomeScreen() {
   );
 }
 
-//  Estilos
+//  Estilos (idénticos)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
