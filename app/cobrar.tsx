@@ -11,7 +11,7 @@ export default function CobrarScreen() {
   const { ordenes } = useOrdenes();
 
   // Filtrar órdenes con estado "listo" (pendientes de pago)
-  const ordenesPendientes = ordenes.filter(orden => orden.estado === 'listo');
+  const ordenesPendientes = ordenes.filter(orden => orden.estado === 'entregado');
 
   // Navegar a detalles de cobro
   const handleCobrarOrden = (orden: Orden) => {

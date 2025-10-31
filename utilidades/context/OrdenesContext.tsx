@@ -174,7 +174,7 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
     setOrdenes(prev => 
       prev.map(orden => 
         orden.id === id 
-          ? { ...orden, estado: 'entregado', metodoPago, idVenta } 
+          ? { ...orden, estado: 'pago', metodoPago, idVenta } 
           : orden
       )
     );
