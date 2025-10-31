@@ -10,15 +10,19 @@ export interface Orden {
   estado: 'disponible' | 'pendiente' | 'en_preparacion' | 'listo' | 'entregado' | 'pago';
   fechaCreacion: Date;
   fechaEntrega?: Date;
+  metodoPago?: 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta';
+  productosNuevos?: number[]; // Índices de productos que son nuevos
+  idVenta?: string; // ID único de la venta generado por el sistema
 }
 
 interface OrdenesContextType {
   ordenes: Orden[];
   ordenesEntregadas: Orden[];
-  agregarOrden: (mesa: string, productos: string[], total: number) => Promise<void>;
-  actualizarProductosOrden: (id: string, productosNuevos: string[], totalNuevo: number) => Promise<void>;
-  actualizarEstadoOrden: (id: string, nuevoEstado: Orden['estado']) => Promise<void>;
-  eliminarOrden: (id: string) => Promise<void>;
+  agregarOrden: (mesa: string, productos: string[], total: number) => void;
+  actualizarProductosOrden: (id: string, productosNuevos: string[], totalNuevo: number) => void;
+  actualizarEstadoOrden: (id: string, nuevoEstado: Orden['estado']) => void;
+  procesarPago: (id: string, metodoPago: 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta', idVenta?: string) => void;
+  eliminarOrden: (id: string) => void;
   getOrdenesPorMesa: (mesa: string) => Orden[];
   getOrdenActivaPorMesa: (mesa: string) => Orden | null;
   getOrdenesPendientes: () => Orden[];
@@ -129,13 +133,56 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
       .eq('numero_mesa', mesa);
   };
 
-  //  Actualizar productos en una orden
-  const actualizarProductosOrden = async (id: string, productosNuevos: string[], totalNuevo: number) => {
-    setOrdenes((prev) =>
-      prev.map((orden) =>
-        orden.id === id ? { ...orden, productos: productosNuevos, total: totalNuevo } : orden
+  const actualizarProductosOrden = (id: string, productosNuevos: string[], totalNuevo: number) => {
+    setOrdenes(prev =>
+      prev.map(orden => {
+        if (orden.id === id) {
+          // Encontrar índices de productos nuevos (los que están al final)
+          const productosOriginales = orden.productos.length;
+          const productosNuevosIndices = [];
+          
+          for (let i = productosOriginales; i < productosNuevos.length; i++) {
+            productosNuevosIndices.push(i);
+          }
+          
+          return { 
+            ...orden, 
+            productos: productosNuevos, 
+            total: totalNuevo,
+            productosNuevos: productosNuevosIndices
+          };
+        }
+        return orden;
+      })
+    );
+  };
+
+  const procesarPago = (id: string, metodoPago: 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta', idVenta?: string) => {
+    const ordenAPagar = ordenes.find(orden => orden.id === id);
+    if (ordenAPagar) {
+      const ordenPagada: Orden = {
+        ...ordenAPagar,
+        estado: 'entregado',
+        fechaEntrega: new Date(),
+        metodoPago,
+        idVenta
+      };
+      setOrdenesEntregadas(prev => [...prev, ordenPagada]);
+    }
+
+    // Actualizar la orden actual con el método de pago y estado entregado
+    setOrdenes(prev => 
+      prev.map(orden => 
+        orden.id === id 
+          ? { ...orden, estado: 'entregado', metodoPago, idVenta } 
+          : orden
       )
     );
+
+    // Programar eliminación después de 10 segundos
+    setTimeout(() => {
+      eliminarOrden(id);
+    }, 10000);
   };
 
   //  Cambiar estado de una orden y guardar si llega a "entregado"
@@ -221,6 +268,7 @@ const actualizarEstadoOrden = async (id: string, nuevoEstado: Orden['estado']) =
     agregarOrden,
     actualizarProductosOrden,
     actualizarEstadoOrden,
+    procesarPago,
     eliminarOrden,
     getOrdenesPorMesa,
     getOrdenActivaPorMesa,

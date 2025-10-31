@@ -3,8 +3,9 @@ import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { useAuth } from '@/utilidades/context/AuthContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
+
 import { router } from 'expo-router';
-import { Alert, StyleSheet, TouchableOpacity } from 'react-native';
+import { Alert, Image, StyleSheet, TouchableOpacity } from 'react-native';
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
@@ -20,6 +21,10 @@ export default function HomeScreen() {
   const handlePedidos = () => router.push('/pedidos');
   const handleInventario = () => Alert.alert('Inventario', 'Navegando a la sección de inventario');
   const handleReportes = () => router.push('/(tabs)/reportes');
+
+  const handleCobrar = () => {
+    router.push('/cobrar');
+  };
 
   const esAdmin = usuario?.rol_id === 1;
   const esMesero = usuario?.rol_id === 2;
@@ -61,6 +66,18 @@ export default function HomeScreen() {
           <IconSymbol name="plus.circle.fill" size={48} color="#fff" />
           <ThemedText style={styles.startOrderText}>Iniciar Orden</ThemedText>
         </TouchableOpacity>
+        
+        {/* Botón Cobrar - Solo para Admin */}
+        {esAdmin && (
+          <TouchableOpacity style={styles.cobrarButton} onPress={handleCobrar}>
+            <Image 
+              source={require('../../assets/iconocobrar.png')} 
+              style={styles.cobrarIcon}
+              resizeMode="contain"
+            />
+            <ThemedText style={styles.cobrarText}>Cobrar</ThemedText>
+          </TouchableOpacity>
+        )}
       </ThemedView>
 
       {/* Botones de navegación */}
@@ -150,6 +167,31 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 24,
     fontWeight: 'bold',
+  },
+  cobrarButton: {
+    backgroundColor: '#32CD32',
+    paddingVertical: 21,
+    paddingHorizontal: 38,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    marginTop: 20,
+    minWidth: 160,
+  },
+  cobrarText: {
+    color: '#fff',
+    fontSize: 21,
+    fontWeight: 'bold',
+  },
+  cobrarIcon: {
+    width: 38,
+    height: 38,
   },
   mainButtonsContainer: {
     flexDirection: 'row',
