@@ -130,3 +130,13 @@ Todas las funciones incluyen manejo de errores y logging detallado. Los errores 
 - [ ] Análisis de productos más vendidos
 - [ ] Reportes por método de pago
 
+
+
+
+
+
+
+
+
+
+

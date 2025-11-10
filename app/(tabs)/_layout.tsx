@@ -6,6 +6,7 @@ import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
 import { Tabs } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /**
  * Decide visibilidad de las tabs según el rol del usuario.
@@ -31,6 +32,7 @@ export default function TabLayout() {
   const { usuario, refreshUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [rolId, setRolId] = useState<number | null>(null);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     const load = async () => {
@@ -59,9 +61,12 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          height: 65,
-          paddingBottom: 8,
+          height: 65 + Math.max(insets.bottom, 8),
+          paddingBottom: Math.max(insets.bottom, 8),
+          paddingTop: 8,
           backgroundColor: '#fff',
+          borderTopWidth: 1,
+          borderTopColor: '#E0E0E0',
         },
       }}
     >

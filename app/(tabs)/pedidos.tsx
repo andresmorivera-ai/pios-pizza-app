@@ -5,11 +5,13 @@ import { useAuth } from '@/utilidades/context/AuthContext';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { router } from 'expo-router';
 import { Alert, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 
 export default function PedidosScreen() {
   const { ordenes, actualizarEstadoOrden, eliminarOrden } = useOrdenes();
   const { usuario, logout } = useAuth(); 
+  const insets = useSafeAreaInsets();
   const esAdmin = usuario?.rol_id === 1;
   const esMesero = usuario?.rol_id === 2;
   const esCajera = usuario?.rol_id === 3;
@@ -247,7 +249,7 @@ export default function PedidosScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
-      <ThemedView style={styles.header}>
+      <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 60, 60) }]}>
         <ThemedText type="title" style={styles.title}>
           Pedidos
         </ThemedText>
@@ -259,7 +261,11 @@ export default function PedidosScreen() {
       </ThemedView>
 
       {/* Lista de órdenes */}
-      <ScrollView style={styles.listaOrdenes} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.listaOrdenes} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 20) }}
+      >
         {ordenes.length === 0 ? (
           <ThemedView style={styles.emptyState}>
             <IconSymbol name="list.clipboard" size={64} color="#ccc" />
@@ -287,7 +293,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },

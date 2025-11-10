@@ -1,21 +1,84 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { obtenerHistorialVentas, VentaCompleta } from '@/servicios-api/ventas';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ReportesScreen() {
   const { ordenes, ordenesEntregadas } = useOrdenes();
   const [ordenesExpandidas, setOrdenesExpandidas] = useState<Set<string>>(new Set());
+  const [ventas, setVentas] = useState<VentaCompleta[]>([]);
+  const [cargandoVentas, setCargandoVentas] = useState(true);
+  const insets = useSafeAreaInsets();
 
-  // Filtrar solo órdenes que fueron pagadas (tienen método de pago)
+  // Cargar ventas desde Supabase
+  useEffect(() => {
+    const cargarVentas = async () => {
+      try {
+        setCargandoVentas(true);
+        // Obtener ventas del día actual
+        const hoy = new Date();
+        const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+        const finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
+        
+        const ventasCargadas = await obtenerHistorialVentas(
+          inicioDia.toISOString(),
+          finDia.toISOString()
+        );
+        
+        setVentas(ventasCargadas);
+        console.log('📦 Ventas cargadas desde Supabase:', ventasCargadas.length);
+        if (ventasCargadas.length > 0) {
+          console.log('📦 Primera venta cargada:', ventasCargadas[0]);
+        }
+      } catch (error) {
+        console.error('Error cargando ventas:', error);
+      } finally {
+        setCargandoVentas(false);
+      }
+    };
+
+    cargarVentas();
+    
+    // Recargar cada 5 segundos para mantener actualizado
+    const interval = setInterval(cargarVentas, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Filtrar solo órdenes que fueron pagadas (tienen método de pago) - fallback local
   const ordenesPagadas = ordenesEntregadas.filter(orden => orden.metodoPago);
 
-  // Calcular ganancias totales (suma de todas las órdenes pagadas)
-  const totalGanancias = ordenesPagadas.reduce((total, orden) => {
-    return total + (orden.total || 0);
-  }, 0);
+  // Convertir ventas de Supabase al formato de Orden para mostrar
+  const ventasComoOrdenes: Orden[] = ventas.map(venta => {
+    // Convertir productos de VentaCompleta (ProductoVenta[]) al formato de string de Orden
+    const productosFormateados = venta.productos.map(p => {
+      // Formato: "Producto (tamaño) $precio Xcantidad"
+      return `${p.nombre} $${p.precioUnitario} X${p.cantidad}`;
+    });
+    
+    return {
+      id: venta.id,
+      mesa: venta.mesa,
+      productos: productosFormateados,
+      total: venta.total,
+      estado: 'pago' as const,
+      fechaCreacion: new Date(venta.fecha_hora),
+      fechaEntrega: new Date(venta.fecha_hora),
+      metodoPago: venta.metodo_pago as 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta',
+      idVenta: venta.id_venta,
+    };
+  });
+
+  // Usar ventas de Supabase si hay, sino usar órdenes locales como fallback
+  const ordenesParaMostrar = ventasComoOrdenes.length > 0 ? ventasComoOrdenes : ordenesPagadas;
+
+  // Calcular ganancias totales (suma de todas las ventas de Supabase o órdenes locales)
+  const totalGanancias = ventas.reduce((total, venta) => total + (venta.total || 0), 0) || 
+    ordenesPagadas.reduce((total, orden) => total + (orden.total || 0), 0);
 
   // Placeholder para gastos (por implementar después)
   const totalGastos = 0;
@@ -26,7 +89,7 @@ export default function ReportesScreen() {
   // Calcular estadísticas básicas
   const totalOrdenes = ordenes.length + ordenesEntregadas.length;
   const ordenesCanceladas = ordenes.filter(o => o.estado === 'cancelado').length;
-  const totalOrdenesPagadas = ordenesPagadas.length;
+  const totalOrdenesPagadas = ventas.length || ordenesPagadas.length;
 
   // Productos más pedidos (incluye órdenes actuales y entregadas)
   const productosCount: Record<string, number> = {};
@@ -221,7 +284,7 @@ export default function ReportesScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
-      <ThemedView style={styles.header}>
+      <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 60, 60) }]}>
         <ThemedText type="title" style={styles.title}>
           Reportes
         </ThemedText>
@@ -233,11 +296,19 @@ export default function ReportesScreen() {
         </ThemedView>
       </ThemedView>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 20) }}
+      >
         {/* Dashboard Financiero */}
         <ThemedView style={styles.dashboardFinanciero}>
-          {/* Tarjeta de Ventas */}
-          <ThemedView style={styles.tarjetaGanancias}>
+          {/* Tarjeta de Ventas - Clickeable */}
+          <TouchableOpacity 
+            style={styles.tarjetaGanancias}
+            onPress={() => router.push('/desglose-ventas')}
+            activeOpacity={0.7}
+          >
             <ThemedView style={styles.tarjetaHeader}>
               <IconSymbol name="arrow.up.circle.fill" size={32} color="#28A745" />
               <ThemedText style={styles.tarjetaTitulo}>Ventas</ThemedText>
@@ -250,8 +321,9 @@ export default function ReportesScreen() {
               <ThemedText style={styles.tarjetaSubtexto}>
                 {totalOrdenesPagadas} órdenes pagadas
               </ThemedText>
+              <IconSymbol name="chevron.right" size={16} color="#28A745" style={{ marginLeft: 'auto' }} />
             </ThemedView>
-          </ThemedView>
+          </TouchableOpacity>
 
           {/* Tarjeta de Gastos */}
           <ThemedView style={styles.tarjetaGastos}>
@@ -326,9 +398,16 @@ export default function ReportesScreen() {
         {/* Historial de Ventas */}
         <ThemedView style={styles.section}>
           <ThemedText style={styles.sectionTitle}>Historial de Ventas</ThemedText>
-          {ordenesPagadas.length > 0 ? (
+          {cargandoVentas ? (
+            <ThemedView style={styles.emptyState}>
+              <ActivityIndicator size="large" color="#FF8C00" />
+              <ThemedText style={styles.emptyStateTexto}>
+                Cargando ventas...
+              </ThemedText>
+            </ThemedView>
+          ) : ordenesParaMostrar.length > 0 ? (
             <ThemedView style={styles.ordenesEntregadasLista}>
-              {ordenesPagadas.slice().reverse().map(renderOrdenEntregada)}
+              {ordenesParaMostrar.slice().reverse().map(renderOrdenEntregada)}
             </ThemedView>
           ) : (
             <ThemedView style={styles.emptyState}>
@@ -357,7 +436,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
@@ -457,6 +535,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+    width: '100%',
   },
   tarjetaSubtexto: {
     fontSize: 13,

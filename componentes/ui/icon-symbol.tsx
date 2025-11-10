@@ -38,6 +38,10 @@ const MAPPING = {
   'timer': 'timer',
   'hand.raised.fill': 'pan-tool',
   'chart.bar': 'bar-chart',
+  'chart.pie': 'pie-chart',
+  'chart.line.uptrend.xyaxis': 'trending-up',
+  'exclamationmark.triangle': 'warning',
+  'arrow.left': 'arrow-back',
 } as IconMapping;
 
 /**

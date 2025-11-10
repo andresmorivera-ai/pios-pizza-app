@@ -1,0 +1,18 @@
+name: Local Config
+version: 1.0.0
+schema: v1
+models:
+  - name: Autodetect
+    provider: ollama
+    model: AUTODETECT
+
+# Ruta del proyecto en tu PC
+project_path: C:/Users/mrriv/Desktop/myApp
+
+# Definir el lenguaje o tipo de proyecto
+language: javascript # Ajusta esto si es otro tipo de proyecto
+
+# Extensiones y herramientas que se utilizarán
+extensions:
+  - Llama3
+  - DeepSeekCoder

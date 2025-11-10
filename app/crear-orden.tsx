@@ -6,6 +6,7 @@ import { useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Interfaces
 interface Producto {
@@ -42,6 +43,7 @@ export default function CrearOrdenScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [productoParaTamano, setProductoParaTamano] = useState<Producto | null>(null);
   const { agregarOrden, actualizarProductosOrden, getOrdenActivaPorMesa } = useOrdenes();
+  const insets = useSafeAreaInsets();
   
   // Detectar si la mesa tiene una orden en curso
   const ordenEnCurso = getOrdenActivaPorMesa(mesa as string);
@@ -326,7 +328,7 @@ export default function CrearOrdenScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
-      <ThemedView style={styles.header}>
+      <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 60, 60) }]}>
         <Link href="/(tabs)/seleccionar-mesa" style={styles.backButton}>
           <IconSymbol name="chevron.left" size={24} color="#8B4513" />
         </Link>
@@ -467,7 +469,9 @@ export default function CrearOrdenScreen() {
         )}
 
         {/* Botones de acción */}
-        <ThemedView style={styles.actionsContainer}>
+        <ThemedView style={[styles.actionsContainer, { 
+          paddingBottom: Math.max(insets.bottom + 30, 30) 
+        }]}>
           <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmarOrden}>
             <IconSymbol name="checkmark.circle.fill" size={24} color="#fff" />
             <ThemedText style={styles.confirmButtonText}>
@@ -577,7 +581,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 20,
     gap: 16,
@@ -813,7 +816,6 @@ const styles = StyleSheet.create({
   actionsContainer: {
     gap: 16,
     paddingHorizontal: 20,
-    paddingBottom: 30,
   },
   confirmButton: {
     flexDirection: 'row',

@@ -6,10 +6,12 @@ import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
 
 import { router } from 'expo-router';
 import { Alert, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const { usuario, logout } = useAuth(); 
+  const insets = useSafeAreaInsets();
 
   //  Ir al login
   const handleAdminLogin = () => {
@@ -37,7 +39,7 @@ export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Header con Admin o Salir */}
-      <ThemedView style={styles.header}>
+      <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top, 60) }]}>
         <ThemedText type="title" style={styles.welcomeText}>
           Bienvenido a Pio's Pizza{usuario ? `, ${usuario.nombre}` : ''}
         </ThemedText>
@@ -81,7 +83,9 @@ export default function HomeScreen() {
       </ThemedView>
 
       {/* Botones de navegación */}
-      <ThemedView style={styles.mainButtonsContainer}>
+      <ThemedView style={[styles.mainButtonsContainer, { 
+        paddingBottom: Math.max(insets.bottom + 30, 30) 
+      }]}>
         {/* Pedidos → Visible para todos */}
         <TouchableOpacity style={styles.mainButton} onPress={handlePedidos}>
           <IconSymbol name="list.clipboard.fill" size={28} color="#FF8C00" />
@@ -118,7 +122,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
@@ -198,7 +201,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingHorizontal: 20,
     paddingVertical: 20,
-    paddingBottom: 30,
   },
   mainButton: {
     alignItems: 'center',

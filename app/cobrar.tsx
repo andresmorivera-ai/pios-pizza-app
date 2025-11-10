@@ -4,14 +4,24 @@ import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
 import { router } from 'expo-router';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CobrarScreen() {
   const colorScheme = useColorScheme();
   const { ordenes } = useOrdenes();
+  const insets = useSafeAreaInsets();
 
-  // Filtrar órdenes con estado "listo" (pendientes de pago)
+  // Filtrar órdenes con estado "entregado" (pendientes de pago)
   const ordenesPendientes = ordenes.filter(orden => orden.estado === 'entregado');
+  
+  // Debug: Log para ver qué órdenes hay
+  console.log('Total órdenes:', ordenes.length);
+  console.log('Órdenes por estado:', ordenes.reduce((acc, o) => {
+    acc[o.estado] = (acc[o.estado] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>));
+  console.log('Órdenes pendientes (entregado):', ordenesPendientes.length);
 
   // Navegar a detalles de cobro
   const handleCobrarOrden = (orden: Orden) => {
@@ -60,7 +70,7 @@ export default function CobrarScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
-      <ThemedView style={styles.header}>
+      <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 40, 40) }]}>
         <ThemedText type="title" style={styles.title}>
           Mesas por pagar
         </ThemedText>
@@ -76,13 +86,17 @@ export default function CobrarScreen() {
           </ThemedText>
         </ThemedView>
       ) : (
-        <View style={styles.listContainer}>
+        <ScrollView 
+          style={styles.listContainer}
+          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 20) }}
+          showsVerticalScrollIndicator={false}
+        >
           {ordenesPendientes.map((orden) => (
             <View key={orden.id}>
               {renderOrden({ item: orden })}
             </View>
           ))}
-        </View>
+        </ScrollView>
       )}
     </ThemedView>
   );
@@ -97,7 +111,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 40,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
@@ -128,9 +141,9 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   listContainer: {
+    flex: 1,
     paddingHorizontal: 20,
     paddingTop: 5,
-    paddingBottom: 20,
   },
   ordenCard: {
     backgroundColor: '#fff',

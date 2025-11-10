@@ -169,22 +169,44 @@ export async function obtenerHistorialVentas(
     const { data, error } = await query;
     
     if (error) {
-      console.error('Error obteniendo historial:', error);
+      console.error('❌ Error obteniendo historial:', error);
+      console.error('❌ Detalles del error:', JSON.stringify(error, null, 2));
       throw error;
     }
 
-    // Transformar los datos para que sean más fáciles de usar
-    const ventasCompletas: VentaCompleta[] = data?.map(venta => ({
-      id: venta.id,
-      id_venta: venta.id_venta,
-      fecha_hora: venta.fecha_hora,
-      mesa: venta.mesa,
-      total: venta.total,
-      metodo_pago: venta.metodo_pago,
-      estado: venta.estado,
-      productos: venta.venta_productos || []
-    })) || [];
+    console.log('📦 Datos obtenidos de Supabase:', data?.length || 0);
+    if (data && data.length > 0) {
+      console.log('📦 Primera venta:', JSON.stringify(data[0], null, 2));
+    }
 
+    // Transformar los datos para que sean más fáciles de usar
+    const ventasCompletas: VentaCompleta[] = data?.map(venta => {
+      // Verificar si venta_productos es un array o está anidado
+      const productosRaw = Array.isArray(venta.venta_productos) 
+        ? venta.venta_productos 
+        : [];
+      
+      // Transformar productos de Supabase al formato ProductoVenta
+      const productos: ProductoVenta[] = productosRaw.map((p: any) => ({
+        nombre: p.producto_nombre || p.nombre || '',
+        cantidad: p.cantidad || 0,
+        precioUnitario: p.precio_unitario || p.precioUnitario || 0,
+        subtotal: p.subtotal || (p.precio_unitario || p.precioUnitario || 0) * (p.cantidad || 0),
+      }));
+      
+      return {
+        id: venta.id,
+        id_venta: venta.id_venta,
+        fecha_hora: venta.fecha_hora,
+        mesa: venta.mesa,
+        total: venta.total,
+        metodo_pago: venta.metodo_pago,
+        estado: venta.estado,
+        productos: productos
+      };
+    }) || [];
+
+    console.log('✅ Ventas transformadas:', ventasCompletas.length);
     return ventasCompletas;
   } catch (error) {
     console.error('Error obteniendo historial de ventas:', error);
@@ -227,4 +249,75 @@ export async function obtenerEstadisticasVentas(fechaInicio?: string, fechaFin?:
     throw error;
   }
 }
+
+/**
+ * Obtiene ventas agrupadas por método de pago con totales
+ */
+export interface VentasPorMetodoPago {
+  metodoPago: string;
+  total: number;
+  cantidad: number;
+  porcentaje: number;
+}
+
+export async function obtenerVentasPorMetodoPago(
+  fechaInicio?: string, 
+  fechaFin?: string
+): Promise<{ ventas: VentasPorMetodoPago[]; totalGeneral: number }> {
+  try {
+    let query = supabase
+      .from('ventas')
+      .select('total, metodo_pago, fecha_hora')
+      .eq('estado', 'completada');
+
+    if (fechaInicio) {
+      query = query.gte('fecha_hora', fechaInicio);
+    }
+    if (fechaFin) {
+      query = query.lte('fecha_hora', fechaFin);
+    }
+
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('Error obteniendo ventas por método de pago:', error);
+      throw error;
+    }
+
+    // Calcular total general
+    const totalGeneral = data?.reduce((sum, venta) => sum + (venta.total || 0), 0) || 0;
+
+    // Agrupar por método de pago
+    const ventasPorMetodo: Record<string, { total: number; cantidad: number }> = {};
+    
+    data?.forEach(venta => {
+      const metodo = venta.metodo_pago || 'desconocido';
+      if (!ventasPorMetodo[metodo]) {
+        ventasPorMetodo[metodo] = { total: 0, cantidad: 0 };
+      }
+      ventasPorMetodo[metodo].total += venta.total || 0;
+      ventasPorMetodo[metodo].cantidad += 1;
+    });
+
+    // Convertir a array y calcular porcentajes
+    const ventas: VentasPorMetodoPago[] = Object.entries(ventasPorMetodo).map(([metodo, datos]) => ({
+      metodoPago: metodo,
+      total: datos.total,
+      cantidad: datos.cantidad,
+      porcentaje: totalGeneral > 0 ? (datos.total / totalGeneral) * 100 : 0,
+    }));
+
+    // Ordenar por total descendente
+    ventas.sort((a, b) => b.total - a.total);
+
+    return { ventas, totalGeneral };
+  } catch (error) {
+    console.error('Error obteniendo ventas por método de pago:', error);
+    throw error;
+  }
+}
+
+
+
+
 

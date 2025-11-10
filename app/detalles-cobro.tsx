@@ -7,6 +7,7 @@ import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Image, Modal, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const metodosPago = [
   { id: 'daviplata', nombre: 'Daviplata', icono: 'phone.fill', color: '#FF6B35', imagen: require('../assets/iconodaviplata.png') },
@@ -19,6 +20,7 @@ export default function DetallesCobroScreen() {
   const colorScheme = useColorScheme();
   const { ordenes, procesarPago } = useOrdenes();
   const params = useLocalSearchParams();
+  const insets = useSafeAreaInsets();
   const [metodoSeleccionado, setMetodoSeleccionado] = useState<string>('');
   const [procesando, setProcesando] = useState(false);
   const [productosExpandidos, setProductosExpandidos] = useState(false);
@@ -299,7 +301,7 @@ export default function DetallesCobroScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Header fijo */}
-      <ThemedView style={styles.header}>
+      <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 25, 25) }]}>
         <TouchableOpacity 
           style={styles.backButton} 
           onPress={() => router.back()}
@@ -384,7 +386,9 @@ export default function DetallesCobroScreen() {
         </ThemedView>
 
         {/* Botón de procesar pago */}
-        <ThemedView style={styles.buttonContainer}>
+        <ThemedView style={[styles.buttonContainer, { 
+          paddingBottom: Math.max(insets.bottom + 15, 15) 
+        }]}>
                   <TouchableOpacity
                     style={[
                       styles.procesarButton,
@@ -564,7 +568,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 25,
     paddingHorizontal: 20,
     paddingBottom: 8,
   },
@@ -789,7 +792,6 @@ const styles = StyleSheet.create({
   buttonContainer: {
     paddingHorizontal: 20,
     paddingTop: 0,
-    paddingBottom: 15,
   },
   procesarButton: {
     backgroundColor: '#32CD32',
