@@ -12,16 +12,17 @@ export default function CobrarScreen() {
   const { ordenes } = useOrdenes();
   const insets = useSafeAreaInsets();
 
-  // Filtrar órdenes con estado "entregado" (pendientes de pago)
-  const ordenesPendientes = ordenes.filter(orden => orden.estado === 'entregado');
+  // Filtrar órdenes con estado "pendiente_por_pagar" (pendientes de pago)
+  const ordenesPendientes = ordenes.filter(orden => orden.estado === 'pendiente_por_pagar');
   
   // Debug: Log para ver qué órdenes hay
-  console.log('Total órdenes:', ordenes.length);
-  console.log('Órdenes por estado:', ordenes.reduce((acc, o) => {
+  console.log('🏪 [Cobrar] Total órdenes:', ordenes.length);
+  console.log('🏪 [Cobrar] Órdenes por estado:', ordenes.reduce((acc, o) => {
     acc[o.estado] = (acc[o.estado] || 0) + 1;
     return acc;
   }, {} as Record<string, number>));
-  console.log('Órdenes pendientes (entregado):', ordenesPendientes.length);
+  console.log('🏪 [Cobrar] Órdenes pendientes de pago:', ordenesPendientes.length);
+  console.log('🏪 [Cobrar] IDs de órdenes:', ordenes.map(o => `${o.id} (${o.estado})`));
 
   // Navegar a detalles de cobro
   const handleCobrarOrden = (orden: Orden) => {

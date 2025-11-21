@@ -181,24 +181,37 @@ export default function DesgloseVentasScreen() {
         >
           {/* Gráfico Circular */}
           <ThemedView style={styles.chartContainer}>
-            <ThemedText style={styles.chartTitle}>Distribución por Método de Pago</ThemedText>
-            <View style={styles.chartWrapper}>
-              <PieChart 
-                data={datosGrafico} 
-                size={300} 
-                strokeWidth={25} 
-              />
-            </View>
-            {/* Total debajo del gráfico */}
-            <ThemedView style={styles.totalContainer}>
+            <ThemedView style={styles.totalBadge}>
               <ThemedText style={styles.totalLabel}>Total de Ventas</ThemedText>
               <ThemedText style={styles.totalValue}>
                 ${totalGeneral.toLocaleString('es-CO')}
               </ThemedText>
+              <ThemedText style={styles.chartSubtitle}>
+                {ventas.reduce((sum, v) => sum + v.cantidad, 0)} {ventas.reduce((sum, v) => sum + v.cantidad, 0) === 1 ? 'venta' : 'ventas'} totales
+              </ThemedText>
             </ThemedView>
-            <ThemedText style={styles.chartSubtitle}>
-              {ventas.reduce((sum, v) => sum + v.cantidad, 0)} {ventas.reduce((sum, v) => sum + v.cantidad, 0) === 1 ? 'venta' : 'ventas'} totales
-            </ThemedText>
+            <ThemedText style={styles.chartTitle}>Distribución por Método de Pago</ThemedText>
+            <View style={styles.chartWrapper}>
+              <PieChart 
+                data={datosGrafico} 
+                size={310} 
+                strokeWidth={25} 
+              />
+            </View>
+            <View style={styles.chartLegend}>
+              {ventas.map(venta => {
+                const color = METODOS_PAGO_COLORS[venta.metodoPago] || METODOS_PAGO_COLORS.desconocido;
+                const info = METODOS_PAGO_INFO[venta.metodoPago] || METODOS_PAGO_INFO.desconocido;
+                return (
+                  <View key={`${venta.metodoPago}-legend`} style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: color }]} />
+                    <ThemedText style={styles.legendText}>
+                      {info.nombre} · {venta.porcentaje.toFixed(1)}%
+                    </ThemedText>
+                  </View>
+                );
+              })}
+            </View>
           </ThemedView>
 
           {/* Lista de Métodos de Pago */}
@@ -317,13 +330,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 20,
   },
-  totalContainer: {
+  totalBadge: {
     alignItems: 'center',
-    marginBottom: 12,
-    paddingTop: 16,
-    borderTopWidth: 2,
-    borderTopColor: '#E0E0E0',
+    marginBottom: 16,
+    paddingVertical: 14,
     width: '100%',
+    backgroundColor: '#FFF8F0',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#FFE2C6',
+    shadowColor: '#FF8C00',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 15,
+    elevation: 6,
   },
   totalLabel: {
     fontSize: 16,
@@ -333,10 +353,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   totalValue: {
-    fontSize: 36,
-    color: '#28A745',
-    fontWeight: 'bold',
+    fontSize: 32,
+    color: '#8B4513',
+    fontWeight: '700',
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
   chartSubtitle: {
     fontSize: 14,
@@ -344,6 +365,34 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     marginTop: 4,
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 16,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7F7F7',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#EEE',
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  legendText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
   },
   metodosContainer: {
     marginBottom: 20,

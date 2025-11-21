@@ -99,9 +99,10 @@ export function PieChart({ data, size = 280, strokeWidth = 25 }: PieChartProps) 
 
   const segments = data.map((item) => {
     const percentage = item.porcentaje / 100;
-    const angle = percentage * 360;
+    const rawAngle = percentage * 360;
+    const safeAngle = Math.min(rawAngle, 359.999);
     const startAngle = currentAngle;
-    const endAngle = currentAngle + angle;
+    const endAngle = currentAngle + safeAngle;
 
     // Crear el path del arco (donut chart)
     const pathData = createArcPath(centerX, centerY, radius, startAngle, endAngle, innerRadius);

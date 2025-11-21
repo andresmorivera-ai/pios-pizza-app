@@ -1,56 +1,113 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
+import { CalendarioRango } from '@/componentes/ui/CalendarioRango';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { obtenerHistorialVentas, VentaCompleta } from '@/servicios-api/ventas';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const extractErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object') {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+};
+
+const formatShortDate = (date: Date) =>
+  `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1)
+    .toString()
+    .padStart(2, '0')}/${date.getFullYear()}`;
+
+const isSameDay = (date1: Date, date2: Date) =>
+  date1.getFullYear() === date2.getFullYear() &&
+  date1.getMonth() === date2.getMonth() &&
+  date1.getDate() === date2.getDate();
+
+const getTodayRange = () => {
+  const ahora = new Date();
+  const referencia = new Date(ahora);
+  referencia.setHours(5, 0, 0, 0);
+  if (ahora < referencia) {
+    referencia.setDate(referencia.getDate() - 1);
+  }
+  const inicioDia = new Date(referencia);
+  const finDia = new Date(referencia);
+  finDia.setDate(finDia.getDate() + 1);
+  finDia.setMilliseconds(finDia.getMilliseconds() - 1);
+  return { inicioDia, finDia };
+};
+
+const isTodayRange = (inicio: Date, fin: Date) => {
+  const todayRange = getTodayRange();
+  return (
+    inicio.getTime() === todayRange.inicioDia.getTime() &&
+    fin.getTime() === todayRange.finDia.getTime()
+  );
+};
+
+const isSameDayRange = (inicio: Date, fin: Date) => {
+  return isSameDay(inicio, fin);
+};
 
 export default function ReportesScreen() {
   const { ordenes, ordenesEntregadas } = useOrdenes();
   const [ordenesExpandidas, setOrdenesExpandidas] = useState<Set<string>>(new Set());
   const [ventas, setVentas] = useState<VentaCompleta[]>([]);
   const [cargandoVentas, setCargandoVentas] = useState(true);
+  const [errorVentas, setErrorVentas] = useState<string | null>(null);
+  const [calendarioVisible, setCalendarioVisible] = useState(false);
+  const [rangoSeleccionado, setRangoSeleccionado] = useState(() => getTodayRange());
   const insets = useSafeAreaInsets();
 
-  // Cargar ventas desde Supabase
-  useEffect(() => {
-    const cargarVentas = async () => {
-      try {
-        setCargandoVentas(true);
-        // Obtener ventas del día actual
-        const hoy = new Date();
-        const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-        const finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
-        
-        const ventasCargadas = await obtenerHistorialVentas(
-          inicioDia.toISOString(),
-          finDia.toISOString()
-        );
-        
-        setVentas(ventasCargadas);
-        console.log('📦 Ventas cargadas desde Supabase:', ventasCargadas.length);
-        if (ventasCargadas.length > 0) {
-          console.log('📦 Primera venta cargada:', ventasCargadas[0]);
-        }
-      } catch (error) {
-        console.error('Error cargando ventas:', error);
-      } finally {
-        setCargandoVentas(false);
-      }
-    };
+  const esHoyRange = useMemo(() => isTodayRange(rangoSeleccionado.inicioDia, rangoSeleccionado.finDia), [rangoSeleccionado]);
+  const esSingleDayRange = useMemo(
+    () => isSameDayRange(rangoSeleccionado.inicioDia, rangoSeleccionado.finDia),
+    [rangoSeleccionado]
+  );
 
-    cargarVentas();
-    
-    // Recargar cada 5 segundos para mantener actualizado
-    const interval = setInterval(cargarVentas, 5000);
-    return () => clearInterval(interval);
+  const fechaBoton = esHoyRange
+    ? formatShortDate(rangoSeleccionado.inicioDia)
+    : esSingleDayRange
+      ? formatShortDate(rangoSeleccionado.inicioDia)
+      : `Desde ${formatShortDate(rangoSeleccionado.inicioDia)}\nHasta ${formatShortDate(rangoSeleccionado.finDia)}`;
+
+  const cargarVentas = useCallback(async (range: { inicioDia: Date; finDia: Date }) => {
+    try {
+      setCargandoVentas(true);
+      setErrorVentas(null);
+      const ventasCargadas = await obtenerHistorialVentas(
+        range.inicioDia.toISOString(),
+        range.finDia.toISOString()
+      );
+      setVentas(ventasCargadas);
+    } catch (error) {
+      const message = extractErrorMessage(error);
+      setErrorVentas(`No se pudieron cargar las ventas: ${message}`);
+    } finally {
+      setCargandoVentas(false);
+    }
   }, []);
 
+  useFocusEffect(useCallback(() => {
+    const todayRange = getTodayRange();
+    setRangoSeleccionado(todayRange);
+    cargarVentas(todayRange);
+    return () => {
+      setRangoSeleccionado(getTodayRange());
+    };
+  }, [cargarVentas]));
+
   // Filtrar solo órdenes que fueron pagadas (tienen método de pago) - fallback local
-  const ordenesPagadas = ordenesEntregadas.filter(orden => orden.metodoPago);
+  const ordenesPagadasFallback = ordenesEntregadas.filter(orden => orden.metodoPago);
 
   // Convertir ventas de Supabase al formato de Orden para mostrar
   const ventasComoOrdenes: Orden[] = ventas.map(venta => {
@@ -74,11 +131,13 @@ export default function ReportesScreen() {
   });
 
   // Usar ventas de Supabase si hay, sino usar órdenes locales como fallback
-  const ordenesParaMostrar = ventasComoOrdenes.length > 0 ? ventasComoOrdenes : ordenesPagadas;
+  const ordenesParaMostrar = ventasComoOrdenes.length > 0 ? ventasComoOrdenes : ordenesPagadasFallback;
 
-  // Calcular ganancias totales (suma de todas las ventas de Supabase o órdenes locales)
-  const totalGanancias = ventas.reduce((total, venta) => total + (venta.total || 0), 0) || 
-    ordenesPagadas.reduce((total, orden) => total + (orden.total || 0), 0);
+  // Calcular ganancias totales (suma de todas las ventas de Supabase o del fallback local)
+  const totalGanancias =
+    ventas.length > 0
+      ? ventas.reduce((total, venta) => total + (venta.total || 0), 0)
+      : ordenesPagadasFallback.reduce((total, orden) => total + (orden.total || 0), 0);
 
   // Placeholder para gastos (por implementar después)
   const totalGastos = 0;
@@ -87,13 +146,14 @@ export default function ReportesScreen() {
   const balance = totalGanancias - totalGastos;
 
   // Calcular estadísticas básicas
-  const totalOrdenes = ordenes.length + ordenesEntregadas.length;
+  const totalOrdenesPagadas = ventas.length > 0 ? ventas.length : ordenesPagadasFallback.length;
+  const totalOrdenes = ordenes.length + totalOrdenesPagadas;
   const ordenesCanceladas = ordenes.filter(o => o.estado === 'cancelado').length;
-  const totalOrdenesPagadas = ventas.length || ordenesPagadas.length;
 
-  // Productos más pedidos (incluye órdenes actuales y entregadas)
+  // Productos más pedidos (usa ventas cuando estén disponibles, sino fallback local)
+  const productosParaContar = ventasComoOrdenes.length > 0 ? ventasComoOrdenes : ordenesEntregadas;
   const productosCount: Record<string, number> = {};
-  [...ordenes, ...ordenesEntregadas].forEach(orden => {
+  productosParaContar.forEach(orden => {
     orden.productos.forEach(producto => {
       productosCount[producto] = (productosCount[producto] || 0) + 1;
     });
@@ -281,20 +341,37 @@ export default function ReportesScreen() {
     );
   };
 
+  const handleAplicarRango = (inicio: Date, fin: Date) => {
+    const nuevoRango = { inicioDia: inicio, finDia: fin };
+    setRangoSeleccionado(nuevoRango);
+    cargarVentas(nuevoRango);
+  };
+
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
-      <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 60, 60) }]}>
-        <ThemedText type="title" style={styles.title}>
-          Reportes
-        </ThemedText>
-        <ThemedView style={styles.fechaContainer}>
-          <IconSymbol name="calendar" size={20} color="#8B4513" />
-          <ThemedText style={styles.fechaTexto}>
-            {new Date().toLocaleDateString('es-ES')}
+        <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 60, 60) }]}>
+          <ThemedText type="title" style={styles.title}>
+            Reportes
           </ThemedText>
+          <ThemedView style={styles.dateRow}>
+            <TouchableOpacity style={styles.dateButton} onPress={() => setCalendarioVisible(true)}>
+              <IconSymbol name="calendar" size={20} color="#8B4513" />
+              <ThemedText style={styles.fechaTexto}>{fechaBoton}</ThemedText>
+              <IconSymbol name="chevron.down" size={16} color="#8B4513" />
+            </TouchableOpacity>
+            {esHoyRange && (
+              <ThemedText style={styles.hoyBadge}>Hoy</ThemedText>
+            )}
+          </ThemedView>
         </ThemedView>
-      </ThemedView>
+
+      {errorVentas && (
+        <ThemedView style={styles.errorBanner}>
+          <ThemedText style={styles.errorBannerText}>{errorVentas}</ThemedText>
+        </ThemedView>
+      )}
+
 
       <ScrollView 
         style={styles.content} 
@@ -423,6 +500,13 @@ export default function ReportesScreen() {
         </ThemedView>
 
       </ScrollView>
+      <CalendarioRango
+        visible={calendarioVisible}
+        onClose={() => setCalendarioVisible(false)}
+        onSelectRange={handleAplicarRango}
+        fechaInicio={rangoSeleccionado.inicioDia}
+        fechaFin={rangoSeleccionado.finDia}
+      />
     </ThemedView>
   );
 }
@@ -444,18 +528,50 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#8B4513',
   },
-  fechaContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 15,
-  },
   fechaTexto: {
     fontSize: 14,
     color: '#8B4513',
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  hoyBadge: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#D84315',
+  },
+  errorBanner: {
+    backgroundColor: '#FFF0F0',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FF8C00',
+    padding: 12,
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  errorBannerText: {
+    color: '#8B0000',
     fontWeight: '600',
   },
   content: {

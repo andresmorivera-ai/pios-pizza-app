@@ -213,7 +213,12 @@ export default function DetallesCobroScreen() {
       console.log('Venta guardada con ID:', resultadoVenta.idVenta);
 
       // Procesar el pago usando la nueva función con el ID de venta
-      procesarPago(ordenId, metodoSeleccionado as 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta', resultadoVenta.idVenta);
+      console.log('🔄 Llamando a procesarPago...');
+      await procesarPago(ordenId, metodoSeleccionado as 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta', resultadoVenta.idVenta);
+      console.log('✅ procesarPago completado');
+
+      // Esperar un momento para que se propague el cambio
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Mostrar confirmación
       Alert.alert(

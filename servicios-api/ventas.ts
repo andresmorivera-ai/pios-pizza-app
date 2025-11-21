@@ -1,5 +1,24 @@
 import { supabase } from '../scripts/lib/supabase';
 
+const formatError = (error: unknown) => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'object') {
+    try {
+      return JSON.stringify(error, null, 2);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+};
+
+const logError = (context: string, error: unknown) => {
+  const message = formatError(error);
+  console.error(`${context}: ${message}`);
+};
+
 // Tipos para las ventas
 export interface ProductoVenta {
   nombre: string;
@@ -49,7 +68,7 @@ export async function generarIdVenta(): Promise<string> {
       .lt('fecha_hora', finDia.toISOString());
     
     if (error) {
-      console.error('Error obteniendo ventas del día:', error);
+      logError('Error obteniendo ventas del día', error);
       throw error;
     }
     
@@ -66,7 +85,7 @@ export async function generarIdVenta(): Promise<string> {
     
     return fechaString + siguienteNumero.toString().padStart(3, '0');
   } catch (error) {
-    console.error('Error generando ID de venta:', error);
+    logError('Error generando ID de venta', error);
     throw error;
   }
 }
@@ -95,7 +114,7 @@ export async function guardarVenta(ventaData: VentaData): Promise<{ venta: any; 
       .single();
 
     if (ventaError) {
-      console.error('Error insertando venta:', ventaError);
+      logError('Error insertando venta', ventaError);
       throw ventaError;
     }
 
@@ -115,14 +134,14 @@ export async function guardarVenta(ventaData: VentaData): Promise<{ venta: any; 
       .insert(productosConVentaId);
 
     if (productosError) {
-      console.error('Error insertando productos:', productosError);
+      logError('Error insertando productos', productosError);
       throw productosError;
     }
 
     console.log('Venta guardada exitosamente:', idVenta);
     return { venta, idVenta };
   } catch (error) {
-    console.error('Error guardando venta:', error);
+    logError('Error guardando venta', error);
     throw error;
   }
 }
@@ -169,8 +188,7 @@ export async function obtenerHistorialVentas(
     const { data, error } = await query;
     
     if (error) {
-      console.error('❌ Error obteniendo historial:', error);
-      console.error('❌ Detalles del error:', JSON.stringify(error, null, 2));
+      logError('❌ Error obteniendo historial', error);
       throw error;
     }
 
@@ -209,7 +227,7 @@ export async function obtenerHistorialVentas(
     console.log('✅ Ventas transformadas:', ventasCompletas.length);
     return ventasCompletas;
   } catch (error) {
-    console.error('Error obteniendo historial de ventas:', error);
+    logError('Error obteniendo historial de ventas', error);
     throw error;
   }
 }
@@ -232,7 +250,10 @@ export async function obtenerEstadisticasVentas(fechaInicio?: string, fechaFin?:
 
     const { data, error } = await query;
     
-    if (error) throw error;
+    if (error) {
+      logError('Error obteniendo estadísticas', error);
+      throw error;
+    }
 
     const estadisticas = {
       totalVentas: data?.length || 0,
@@ -245,7 +266,7 @@ export async function obtenerEstadisticasVentas(fechaInicio?: string, fechaFin?:
 
     return estadisticas;
   } catch (error) {
-    console.error('Error obteniendo estadísticas:', error);
+    logError('Error obteniendo estadísticas', error);
     throw error;
   }
 }
@@ -280,7 +301,7 @@ export async function obtenerVentasPorMetodoPago(
     const { data, error } = await query;
     
     if (error) {
-      console.error('Error obteniendo ventas por método de pago:', error);
+      logError('Error obteniendo ventas por método de pago', error);
       throw error;
     }
 
@@ -312,7 +333,7 @@ export async function obtenerVentasPorMetodoPago(
 
     return { ventas, totalGeneral };
   } catch (error) {
-    console.error('Error obteniendo ventas por método de pago:', error);
+    logError('Error obteniendo ventas por método de pago', error);
     throw error;
   }
 }

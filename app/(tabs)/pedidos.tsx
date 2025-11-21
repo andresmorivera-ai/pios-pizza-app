@@ -46,6 +46,8 @@ export default function PedidosScreen() {
         return '#2196F3';
       case 'listo':
         return '#4CAF50';
+      case 'pendiente_por_pagar':
+        return '#D84315';
       case 'entregado':
         return '#9C27B0';
       case 'pago':
@@ -65,6 +67,8 @@ export default function PedidosScreen() {
         return 'En Preparación';
       case 'listo':
         return 'Listo';
+      case 'pendiente_por_pagar':
+        return 'Pendiente por pagar';
       case 'entregado':
         return 'Entregado';
       case 'pago':
@@ -88,9 +92,11 @@ export default function PedidosScreen() {
         tituloBoton = 'Marcar como Listo';
         break;
       case 'listo':
-        nuevoEstado = 'entregado';
-        tituloBoton = 'Marcar como Entregado';
+        nuevoEstado = 'pendiente_por_pagar';
+        tituloBoton = 'Marcar como pendiente por pagar';
         break;
+      case 'pendiente_por_pagar':
+        return;
       case 'entregado':
         nuevoEstado = 'pago';
         tituloBoton = 'Registrar Pago';
@@ -167,8 +173,20 @@ export default function PedidosScreen() {
           // Limpiar el nombre del producto (quitar precio)
           const productoLimpio = productoConPrecio.split(' $')[0].trim(); // "Producto (tamaño)"
           
-          // Verificar si este producto es nuevo
+          // Verificar el estado del producto
           const esProductoNuevo = orden.productosNuevos?.includes(index) || false;
+          const esProductoListo = orden.productosListos?.includes(index) || false;
+          const esProductoEntregado = orden.productosEntregados?.includes(index) || false;
+          
+          if (index === 0) {
+            console.log('🔍 Estados de productos en Pedidos:', {
+              ordenId: orden.id,
+              productosNuevos: orden.productosNuevos,
+              productosListos: orden.productosListos,
+              productosEntregados: orden.productosEntregados,
+              totalProductos: orden.productos.length,
+            });
+          }
           
           return (
             <ThemedView key={index} style={styles.productoItemContainer}>
@@ -178,6 +196,12 @@ export default function PedidosScreen() {
                 </ThemedText>
                 {esProductoNuevo && (
                   <ThemedText style={styles.nuevoTexto}>NUEVO!</ThemedText>
+                )}
+                {esProductoListo && !esProductoNuevo && (
+                  <ThemedText style={styles.listoTexto}>Listo</ThemedText>
+                )}
+                {esProductoEntregado && !esProductoNuevo && !esProductoListo && (
+                  <ThemedText style={styles.entregadoTexto}>Entregado</ThemedText>
                 )}
               </ThemedView>
               {cantidad && (
@@ -214,7 +238,7 @@ export default function PedidosScreen() {
         </ThemedView>
         
         <ThemedView style={styles.botonesContainer}>
-          {orden.estado !== 'pago' && (
+          {orden.estado !== 'pago' && orden.estado !== 'pendiente_por_pagar' && (
             <TouchableOpacity 
               style={[
                 styles.accionButton,
@@ -225,21 +249,22 @@ export default function PedidosScreen() {
               <IconSymbol name="checkmark.circle.fill" size={16} color="#fff" />
               <ThemedText style={styles.accionButtonTexto}>
                 {
-                 
-                 orden.estado === 'pendiente' ? 'Comenzar' : 
-                 orden.estado === 'en_preparacion' ? 'Listo' : 
-                 orden.estado === 'listo' ? 'Entregar' : 'Pagar'
+                  orden.estado === 'pendiente' ? 'Comenzar' : 
+                  orden.estado === 'en_preparacion' ? 'Listo' : 
+                  orden.estado === 'listo' ? 'Entregar' : 'Pagar'
                 }
               </ThemedText>
             </TouchableOpacity>
           )}
           
-          <TouchableOpacity 
-            style={styles.eliminarButton}
-            onPress={() => handleEliminarOrden(orden)}
-          >
-            <IconSymbol name="trash" size={16} color="#fff" />
-          </TouchableOpacity>
+          {orden.estado !== 'pendiente_por_pagar' && (!orden.productosEntregados || orden.productosEntregados.length === 0) && (
+            <TouchableOpacity 
+              style={styles.eliminarButton}
+              onPress={() => handleEliminarOrden(orden)}
+            >
+              <IconSymbol name="trash" size={16} color="#fff" />
+            </TouchableOpacity>
+          )}
         </ThemedView>
       </ThemedView>
     </ThemedView>
@@ -395,6 +420,18 @@ const styles = StyleSheet.create({
   },
   nuevoTexto: {
     color: '#FF0000',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  entregadoTexto: {
+    color: '#4CAF50',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  listoTexto: {
+    color: '#4CAF50',
     fontSize: 12,
     fontWeight: 'bold',
     marginLeft: 8,

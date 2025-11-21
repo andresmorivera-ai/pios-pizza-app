@@ -25,9 +25,21 @@ export default function CocinaScreen() {
   const [detallesFake, setDetallesFake] = useState<Record<string, string[]>>({});
   const [ordenesVisibles, setOrdenesVisibles] = useState<Orden[]>([]);
 
-  // Filtrar solo órdenes activas
+  // Filtrar solo órdenes activas (mostrar todo excepto pagadas y pendiente_por_pagar sin productos nuevos)
   useEffect(() => {
-    const nuevas = ordenes.filter(o => o.estado !== 'listo');
+    const nuevas = ordenes.filter(o => {
+      // Excluir órdenes pagadas
+      if (o.estado === 'pago') return false;
+      
+      // Si está en "pendiente_por_pagar" pero tiene productos nuevos, mostrarla
+      if (o.estado === 'pendiente_por_pagar' && o.productosNuevos && o.productosNuevos.length > 0) return true;
+      
+      // Si está en "pendiente_por_pagar" sin productos nuevos, ocultarla
+      if (o.estado === 'pendiente_por_pagar') return false;
+      
+      // Mostrar todas las demás (pendiente, en_preparacion, listo, entregado)
+      return true;
+    });
     const nuevosDetalles: Record<string, string[]> = {};
     
     setDetallesFake(nuevosDetalles);
@@ -73,6 +85,7 @@ export default function CocinaScreen() {
   };
 
   const handleMarcarListo = async (orden: Orden) => {
+    console.log('🍳 Marcando orden como lista:', orden.id, 'Estado actual:', orden.estado);
     await actualizarEstadoOrden(orden.id, 'listo');
     setTimeout(() => {
       setOrdenesVisibles((prev) => prev.filter((o) => o.id !== orden.id));
@@ -99,7 +112,10 @@ export default function CocinaScreen() {
       {/* HEADER */}
       <ThemedView style={styles.header}>
         <View style={styles.headerTop}>
-          <ThemedText type="title" style={styles.title}>Cocina</ThemedText>
+          <View style={styles.titleContainer}>
+            <IconSymbol name="flame.fill" size={32} color="#FF4500" />
+            <ThemedText type="title" style={styles.title}>Cocina</ThemedText>
+          </View>
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <ThemedText style={styles.logoutText}>Salir</ThemedText>
           </TouchableOpacity>
@@ -143,21 +159,52 @@ export default function CocinaScreen() {
                 {expandida && (
                   <>
                     <View style={styles.productosContainer}>
-                      {orden.productos.map((producto, i) => {
-                        const partes = producto.split(' X');
-                        const nombre = partes[0].split(' $')[0].trim();
-                        const cantidad = partes[1];
-                        return (
-                          <View key={i} style={styles.productoItemContainer}>
-                            <ThemedText style={styles.productoItem}>• {nombre}</ThemedText>
-                            {cantidad && (
-                              <View style={styles.cantidadBadge}>
-                                <ThemedText style={styles.cantidadBadgeTexto}>X{cantidad}</ThemedText>
+                      {orden.productos && orden.productos.length > 0 ? (
+                        orden.productos.map((producto, i) => {
+                          const partes = producto.split(' X');
+                          const nombre = partes[0].split(' $')[0].trim();
+                          const cantidad = partes[1];
+                          const esProductoNuevo = orden.productosNuevos?.includes(i);
+                          const esProductoListo = orden.productosListos?.includes(i);
+                          const esProductoEntregado = orden.productosEntregados?.includes(i);
+                          
+                          return (
+                            <View key={i} style={styles.productoItemContainer}>
+                              <View style={styles.productoItemInfo}>
+                                <ThemedText style={styles.productoItem}>• {nombre}</ThemedText>
+                                {esProductoNuevo && (
+                                  <View style={styles.productoStatus}>
+                                    <ThemedText style={[styles.productoStatusText, styles.nuevoTexto]}>
+                                      Nuevo!
+                                    </ThemedText>
+                                  </View>
+                                )}
+                                {esProductoListo && !esProductoNuevo && (
+                                  <View style={styles.productoStatus}>
+                                    <ThemedText style={[styles.productoStatusText, styles.listoTexto]}>
+                                      Listo
+                                    </ThemedText>
+                                  </View>
+                                )}
+                                {esProductoEntregado && !esProductoNuevo && !esProductoListo && (
+                                  <View style={styles.productoStatus}>
+                                    <ThemedText style={[styles.productoStatusText, styles.entregadoTexto]}>
+                                      Entregado
+                                    </ThemedText>
+                                  </View>
+                                )}
                               </View>
-                            )}
-                          </View>
-                        );
-                      })}
+                              {cantidad && (
+                                <View style={styles.cantidadBadge}>
+                                  <ThemedText style={styles.cantidadBadgeTexto}>X{cantidad}</ThemedText>
+                                </View>
+                              )}
+                            </View>
+                          );
+                        })
+                      ) : (
+                        <ThemedText style={styles.productoItem}>No hay productos</ThemedText>
+                      )}
                     </View>
 
                     <View style={styles.detallesContainer}>
@@ -166,7 +213,7 @@ export default function CocinaScreen() {
                       ))}
                     </View>
 
-                    {orden.estado === 'en_preparacion' && (
+                    {(orden.estado === 'pendiente' || orden.estado === 'en_preparacion') && (
                       <TouchableOpacity style={styles.botonListo} onPress={() => handleMarcarListo(orden)}>
                         <ThemedText style={styles.textoListo}>Marcar como Listo</ThemedText>
                       </TouchableOpacity>
@@ -196,6 +243,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 5,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   title: { fontSize: 28, fontWeight: 'bold', color: '#8B4513' },
   subtitulo: { fontSize: 14, color: '#8B4513' },
   lista: { paddingHorizontal: 20, marginTop: 10 },
@@ -224,9 +276,36 @@ const styles = StyleSheet.create({
   productoItemContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingVertical: 4,
   },
-  productoItem: { fontSize: 14, color: '#555', flex: 1 },
+  productoItemInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  productoItem: { 
+    fontSize: 14, 
+    color: '#333', 
+    fontWeight: '600',
+  },
+  productoStatus: {
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    marginLeft: 8,
+  },
+  productoStatusText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  nuevoTexto: { 
+    color: '#D84315',
+  },
+  entregadoTexto: { color: '#4CAF50' },
+  listoTexto: { color: '#4CAF50' },
   cantidadBadge: {
     backgroundColor: '#9C27B0',
     borderRadius: 10,

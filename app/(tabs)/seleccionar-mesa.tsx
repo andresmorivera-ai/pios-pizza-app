@@ -6,10 +6,26 @@ import { Link, router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 
+const formatErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object') {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+};
+
+const logError = (context: string, error: unknown) => {
+  console.error(`${context}: ${formatErrorMessage(error)}`);
+};
+
 type Mesa = {
   id: number;
   numero_mesa: number;
-  estado: 'disponible' | 'pendiente' | 'en_preparacion' | 'listo' | 'entregado' | 'pago';
+  estado: 'disponible' | 'pendiente' | 'en_preparacion' | 'listo' | 'pendiente_por_pagar' | 'entregado' | 'pago';
   ultima_actualizacion: string;
 };
 
@@ -43,6 +59,7 @@ async function actualizarEstadoMesaDesdeOrden(mesaNumero: number) {
 export default function SeleccionarMesaScreen() {
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [mesaSeleccionada, setMesaSeleccionada] = useState<number | null>(null);
+  const [errorMesas, setErrorMesas] = useState<string | null>(null);
   const animacionesRef = useRef<{ [key: number]: Animated.Value }>({});
 
   //  Colores según estado
@@ -56,6 +73,8 @@ export default function SeleccionarMesaScreen() {
         return '#2196F3';
       case 'listo':
         return '#4CAF50';
+      case 'pendiente_por_pagar':
+        return '#D84315';
       case 'entregado':
         return '#9C27B0';
       case 'pago':
@@ -67,15 +86,23 @@ export default function SeleccionarMesaScreen() {
 
   // Carga inicial
   const cargarMesas = async () => {
-    const { data, error } = await supabase
-      .from('mesas')
-      .select('*')
-      .order('numero_mesa', { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from('mesas')
+        .select('*')
+        .order('numero_mesa', { ascending: true });
 
-    if (!error && data) {
-      setMesas(data);
-    } else {
-      console.error('Error cargando mesas:', error);
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        setMesas(data);
+        setErrorMesas(null);
+      }
+    } catch (error) {
+      logError('Error cargando mesas', error);
+      setErrorMesas(`No se pudieron cargar las mesas: ${formatErrorMessage(error)}`);
     }
   };
 
@@ -200,6 +227,11 @@ export default function SeleccionarMesaScreen() {
           Seleccionar Mesa
         </ThemedText>
       </ThemedView>
+      {errorMesas && (
+        <ThemedView style={styles.errorBanner}>
+          <ThemedText style={styles.errorBannerText}>{errorMesas}</ThemedText>
+        </ThemedView>
+      )}
 
       {/* Contenido */}
       <ScrollView
@@ -331,4 +363,17 @@ const styles = StyleSheet.create({
   leyendaItem: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   colorBox: { width: 24, height: 24, borderRadius: 5 },
   leyendaTexto: { fontSize: 13, color: '#555', fontWeight: '500' },
+  errorBanner: {
+    marginHorizontal: 20,
+    marginBottom: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FF8C00',
+    backgroundColor: '#FFF7F0',
+    padding: 10,
+  },
+  errorBannerText: {
+    color: '#8B0000',
+    fontWeight: '600',
+  },
 });
