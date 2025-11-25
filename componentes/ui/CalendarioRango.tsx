@@ -12,12 +12,12 @@ interface CalendarioRangoProps {
   fechaFin?: Date;
 }
 
-export function CalendarioRango({ 
-  visible, 
-  onClose, 
+export function CalendarioRango({
+  visible,
+  onClose,
   onSelectRange,
   fechaInicio,
-  fechaFin 
+  fechaFin
 }: CalendarioRangoProps) {
   const [mesActual, setMesActual] = useState(new Date());
   const [seleccionInicio, setSeleccionInicio] = useState<Date | null>(fechaInicio || null);
@@ -52,17 +52,17 @@ export function CalendarioRango({
     const diaInicioSemana = primerDia.getDay();
 
     const dias: (number | null)[] = [];
-    
+
     // Agregar días vacíos al inicio
     for (let i = 0; i < diaInicioSemana; i++) {
       dias.push(null);
     }
-    
+
     // Agregar días del mes
     for (let i = 1; i <= diasEnMes; i++) {
       dias.push(i);
     }
-    
+
     return dias;
   };
 
@@ -105,7 +105,7 @@ export function CalendarioRango({
     }
 
     const fechaSeleccionada = new Date(mesActual.getFullYear(), mesActual.getMonth(), dia, 0, 0, 0, 0);
-    
+
     if (modoSeleccion === 'inicio') {
       setSeleccionInicio(fechaSeleccionada);
       setModoSeleccion('fin');
@@ -131,13 +131,25 @@ export function CalendarioRango({
 
   const aplicarRango = () => {
     if (seleccionInicio && seleccionFin) {
-      // Ajustar fechas: inicio a las 00:00, fin a las 23:59:59
-      const inicio = new Date(seleccionInicio);
-      inicio.setHours(0, 0, 0, 0);
-      
-      const fin = new Date(seleccionFin);
-      fin.setHours(23, 59, 59, 999);
-      
+      // Usar UTC para que coincida con cómo se guardan las fechas en la BD
+      const inicio = new Date(Date.UTC(
+        seleccionInicio.getFullYear(),
+        seleccionInicio.getMonth(),
+        seleccionInicio.getDate(),
+        0, 0, 0, 0
+      ));
+
+      const fin = new Date(Date.UTC(
+        seleccionFin.getFullYear(),
+        seleccionFin.getMonth(),
+        seleccionFin.getDate(),
+        23, 59, 59, 999
+      ));
+
+      console.log('📅 Calendario - Rango en UTC:');
+      console.log('  Inicio:', inicio.toISOString());
+      console.log('  Fin:', fin.toISOString());
+
       onSelectRange(inicio, fin);
       onClose();
     }
@@ -175,11 +187,11 @@ export function CalendarioRango({
             <TouchableOpacity onPress={() => cambiarMes('anterior')} style={styles.botonMes}>
               <IconSymbol name="chevron.left" size={24} color="#8B4513" />
             </TouchableOpacity>
-            
+
             <ThemedText style={styles.mesTitulo}>
               {meses[mesActual.getMonth()]} {mesActual.getFullYear()}
             </ThemedText>
-            
+
             <TouchableOpacity onPress={() => cambiarMes('siguiente')} style={styles.botonMes}>
               <IconSymbol name="chevron.right" size={24} color="#8B4513" />
             </TouchableOpacity>

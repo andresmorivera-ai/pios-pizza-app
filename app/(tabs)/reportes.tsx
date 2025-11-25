@@ -2,12 +2,13 @@ import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { CalendarioRango } from '@/componentes/ui/CalendarioRango';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { supabase } from '@/scripts/lib/supabase';
 import { obtenerHistorialVentas, VentaCompleta } from '@/servicios-api/ventas';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const extractErrorMessage = (error: unknown) => {
@@ -62,10 +63,14 @@ export default function ReportesScreen() {
   const { ordenes, ordenesEntregadas } = useOrdenes();
   const [ordenesExpandidas, setOrdenesExpandidas] = useState<Set<string>>(new Set());
   const [ventas, setVentas] = useState<VentaCompleta[]>([]);
+  const [gastos, setGastos] = useState<any[]>([]);
+  const [totalGastos, setTotalGastos] = useState(0);
   const [cargandoVentas, setCargandoVentas] = useState(true);
+  const [cargandoGastos, setCargandoGastos] = useState(true);
   const [errorVentas, setErrorVentas] = useState<string | null>(null);
   const [calendarioVisible, setCalendarioVisible] = useState(false);
   const [rangoSeleccionado, setRangoSeleccionado] = useState(() => getTodayRange());
+  const [vistaActiva, setVistaActiva] = useState<'ventas' | 'gastos'>('ventas');
   const insets = useSafeAreaInsets();
 
   const esHoyRange = useMemo(() => isTodayRange(rangoSeleccionado.inicioDia, rangoSeleccionado.finDia), [rangoSeleccionado]);
@@ -84,10 +89,23 @@ export default function ReportesScreen() {
     try {
       setCargandoVentas(true);
       setErrorVentas(null);
+
+      console.log('🔍 CARGANDO VENTAS CON RANGO:');
+      console.log('  📅 Inicio:', range.inicioDia.toISOString());
+      console.log('  📅 Fin:', range.finDia.toISOString());
+      console.log('  📅 Inicio (local):', range.inicioDia.toLocaleString('es-CO'));
+      console.log('  📅 Fin (local):', range.finDia.toLocaleString('es-CO'));
+
       const ventasCargadas = await obtenerHistorialVentas(
         range.inicioDia.toISOString(),
         range.finDia.toISOString()
       );
+
+      console.log('✅ VENTAS CARGADAS:', ventasCargadas.length);
+      if (ventasCargadas.length > 0) {
+        console.log('  Primera venta:', ventasCargadas[0].fecha_hora);
+      }
+
       setVentas(ventasCargadas);
     } catch (error) {
       const message = extractErrorMessage(error);
@@ -97,14 +115,52 @@ export default function ReportesScreen() {
     }
   }, []);
 
+  const cargarGastos = useCallback(async (range?: { inicioDia: Date; finDia: Date }) => {
+    try {
+      setCargandoGastos(true);
+
+      console.log('🔍 Cargando gastos', range ? 'con filtro' : 'TODOS (sin filtro)');
+
+      let query = supabase
+        .from('gastos')
+        .select('*')
+        .order('fecha', { ascending: false });
+
+      // Solo filtrar si se proporciona un rango
+      if (range) {
+        query = query
+          .gte('fecha', range.inicioDia.toISOString())
+          .lte('fecha', range.finDia.toISOString());
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      console.log('📊 Gastos obtenidos:', data?.length || 0);
+
+      setGastos(data || []);
+      const total = (data || []).reduce((sum: number, gasto: any) => sum + (gasto.valor || 0), 0);
+      setTotalGastos(total);
+
+      console.log('✅ Total de gastos:', total);
+    } catch (error) {
+      console.error('Error cargando gastos:', error);
+      setTotalGastos(0);
+    } finally {
+      setCargandoGastos(false);
+    }
+  }, []);
+
   useFocusEffect(useCallback(() => {
     const todayRange = getTodayRange();
     setRangoSeleccionado(todayRange);
     cargarVentas(todayRange);
+    cargarGastos(); // Cargar TODOS los gastos sin filtro por defecto
     return () => {
       setRangoSeleccionado(getTodayRange());
     };
-  }, [cargarVentas]));
+  }, [cargarVentas, cargarGastos]));
 
   // Filtrar solo órdenes que fueron pagadas (tienen método de pago) - fallback local
   const ordenesPagadasFallback = ordenesEntregadas.filter(orden => orden.metodoPago);
@@ -116,7 +172,7 @@ export default function ReportesScreen() {
       // Formato: "Producto (tamaño) $precio Xcantidad"
       return `${p.nombre} $${p.precioUnitario} X${p.cantidad}`;
     });
-    
+
     return {
       id: venta.id,
       mesa: venta.mesa,
@@ -139,8 +195,7 @@ export default function ReportesScreen() {
       ? ventas.reduce((total, venta) => total + (venta.total || 0), 0)
       : ordenesPagadasFallback.reduce((total, orden) => total + (orden.total || 0), 0);
 
-  // Placeholder para gastos (por implementar después)
-  const totalGastos = 0;
+  // Total de gastos ya calculado en cargarGastos
 
   // Calcular balance/utilidad
   const balance = totalGanancias - totalGastos;
@@ -160,7 +215,7 @@ export default function ReportesScreen() {
   });
 
   const productosMasPedidos = Object.entries(productosCount)
-    .sort(([,a], [,b]) => b - a)
+    .sort(([, a], [, b]) => b - a)
     .slice(0, 5);
 
   // Función para obtener información del método de pago
@@ -193,7 +248,7 @@ export default function ReportesScreen() {
     // Limpiar el nombre del producto (quitar precio y cantidad)
     // Formato: "Pollo Asado (1/2) $20000 X4" → "Pollo Asado (1/2)"
     const nombreLimpio = producto.split(' $')[0].trim();
-    
+
     return (
       <ThemedView key={producto} style={styles.productoItem}>
         <ThemedView style={styles.productoRanking}>
@@ -229,13 +284,13 @@ export default function ReportesScreen() {
       // Formato nuevo: "Producto (tamaño) $20000 X2"
       const precioMatch = producto.match(/\$(\d+)/);
       const cantidadMatch = producto.match(/X(\d+)/);
-      
+
       if (precioMatch) {
         const precioUnitario = parseInt(precioMatch[1]);
         const cantidad = cantidadMatch ? parseInt(cantidadMatch[1]) : 1;
         return total + (precioUnitario * cantidad);
       }
-      
+
       return total;
     }, 0);
   };
@@ -245,7 +300,7 @@ export default function ReportesScreen() {
     // Usar total guardado o calcular si no existe (órdenes antiguas)
     const totalVenta = orden.total || calcularTotalOrden(orden.productos);
     const metodoPagoInfo = getMetodoPagoInfo(orden.metodoPago);
-    
+
     return (
       <ThemedView key={orden.id} style={styles.ordenEntregadaCard}>
         {/* Vista Compacta - Siempre visible */}
@@ -255,12 +310,12 @@ export default function ReportesScreen() {
               <IconSymbol name="table.furniture" size={16} color="#fff" />
               <ThemedText style={styles.mesaBadgeTexto}>Mesa {orden.mesa}</ThemedText>
             </ThemedView>
-            
+
             {/* ID de Venta */}
             {orden.idVenta && (
               <ThemedText style={styles.idVentaTexto}>ID: {orden.idVenta}</ThemedText>
             )}
-            
+
             <ThemedText style={styles.ordenTotalVenta}>
               ${totalVenta.toLocaleString('es-CO')}
             </ThemedText>
@@ -276,7 +331,7 @@ export default function ReportesScreen() {
                 month: '2-digit'
               })}
             </ThemedText>
-            
+
             <ThemedView style={[styles.metodoPagoBadge, { backgroundColor: metodoPagoInfo.color }]}>
               <IconSymbol name={metodoPagoInfo.icono as any} size={14} color="#fff" />
               <ThemedText style={styles.metodoPagoTexto}>{metodoPagoInfo.nombre}</ThemedText>
@@ -291,10 +346,10 @@ export default function ReportesScreen() {
           activeOpacity={0.7}
         >
           <ThemedText style={styles.detallesTexto}>Detalles</ThemedText>
-          <IconSymbol 
-            name={isExpandida ? "chevron.up" : "chevron.down"} 
-            size={18} 
-            color="#8B4513" 
+          <IconSymbol
+            name={isExpandida ? "chevron.up" : "chevron.down"}
+            size={18}
+            color="#8B4513"
           />
         </TouchableOpacity>
 
@@ -302,7 +357,7 @@ export default function ReportesScreen() {
         {isExpandida && (
           <ThemedView style={styles.ordenExpandida}>
             <ThemedView style={styles.divider} />
-            
+
             <ThemedView style={styles.ordenProductos}>
               <ThemedText style={styles.ordenProductosTitulo}>Productos:</ThemedText>
               {orden.productos.map((producto, index) => {
@@ -310,12 +365,12 @@ export default function ReportesScreen() {
                 const partes = producto.split(' X');
                 const productoConPrecio = partes[0]; // "Producto (tamaño) $20000"
                 const cantidad = partes[1];
-                
+
                 // Limpiar el nombre del producto (quitar precio)
                 const productoLimpio = productoConPrecio.split(' $')[0].trim(); // "Producto (tamaño)"
-                
+
                 return (
-                  <ThemedView key={index} style={styles.productoDetalleContainer}>
+                  <ThemedView key={`${orden.id}-prod-${index}`} style={styles.productoDetalleContainer}>
                     <ThemedText style={styles.ordenProductoItem}>
                       • {productoLimpio}
                     </ThemedText>
@@ -345,26 +400,27 @@ export default function ReportesScreen() {
     const nuevoRango = { inicioDia: inicio, finDia: fin };
     setRangoSeleccionado(nuevoRango);
     cargarVentas(nuevoRango);
+    cargarGastos(nuevoRango);
   };
 
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
-        <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 60, 60) }]}>
-          <ThemedText type="title" style={styles.title}>
-            Reportes
-          </ThemedText>
-          <ThemedView style={styles.dateRow}>
-            <TouchableOpacity style={styles.dateButton} onPress={() => setCalendarioVisible(true)}>
-              <IconSymbol name="calendar" size={20} color="#8B4513" />
-              <ThemedText style={styles.fechaTexto}>{fechaBoton}</ThemedText>
-              <IconSymbol name="chevron.down" size={16} color="#8B4513" />
-            </TouchableOpacity>
-            {esHoyRange && (
-              <ThemedText style={styles.hoyBadge}>Hoy</ThemedText>
-            )}
-          </ThemedView>
+      <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 60, 60) }]}>
+        <ThemedText type="title" style={styles.title}>
+          Reportes
+        </ThemedText>
+        <ThemedView style={styles.dateRow}>
+          <TouchableOpacity style={styles.dateButton} onPress={() => setCalendarioVisible(true)}>
+            <IconSymbol name="calendar" size={20} color="#8B4513" />
+            <ThemedText style={styles.fechaTexto}>{fechaBoton}</ThemedText>
+            <IconSymbol name="chevron.down" size={16} color="#8B4513" />
+          </TouchableOpacity>
+          {esHoyRange && (
+            <ThemedText style={styles.hoyBadge}>Hoy</ThemedText>
+          )}
         </ThemedView>
+      </ThemedView>
 
       {errorVentas && (
         <ThemedView style={styles.errorBanner}>
@@ -373,15 +429,15 @@ export default function ReportesScreen() {
       )}
 
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 20) }}
       >
         {/* Dashboard Financiero */}
         <ThemedView style={styles.dashboardFinanciero}>
           {/* Tarjeta de Ventas - Clickeable */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.tarjetaGanancias}
             onPress={() => router.push('/desglose-ventas')}
             activeOpacity={0.7}
@@ -403,7 +459,11 @@ export default function ReportesScreen() {
           </TouchableOpacity>
 
           {/* Tarjeta de Gastos */}
-          <ThemedView style={styles.tarjetaGastos}>
+          <TouchableOpacity
+            style={styles.tarjetaGastos}
+            onPress={() => router.push('/gastos')}
+            activeOpacity={0.7}
+          >
             <ThemedView style={styles.tarjetaHeader}>
               <IconSymbol name="arrow.down.circle.fill" size={32} color="#DC3545" />
               <ThemedText style={styles.tarjetaTituloGastos}>Gastos</ThemedText>
@@ -412,12 +472,13 @@ export default function ReportesScreen() {
               ${totalGastos.toLocaleString('es-CO')}
             </ThemedText>
             <ThemedView style={styles.tarjetaFooter}>
-              <IconSymbol name="info.circle" size={14} color="#999" />
+              <IconSymbol name="cart.fill" size={14} color="#DC3545" />
               <ThemedText style={styles.tarjetaSubtextoGastos}>
-                Próximamente disponible
+                {gastos.length} {esHoyRange ? 'gastos hoy' : 'gastos en período'}
               </ThemedText>
+              <IconSymbol name="chevron.right" size={16} color="#DC3545" style={{ marginLeft: 'auto' }} />
             </ThemedView>
-          </ThemedView>
+          </TouchableOpacity>
 
           {/* Tarjeta de Balance/Utilidad */}
           <ThemedView style={styles.tarjetaBalance}>
@@ -455,9 +516,11 @@ export default function ReportesScreen() {
           <ThemedText style={styles.sectionTitle}>Productos Más Pedidos</ThemedText>
           {productosMasPedidos.length > 0 ? (
             <ThemedView style={styles.productosLista}>
-              {productosMasPedidos.map(([producto, cantidad], index) => 
-                renderProductoMasPedido(producto, cantidad, index)
-              )}
+              {productosMasPedidos.map(([producto, cantidad], index) => (
+                <View key={`producto-${index}-${producto}`}>
+                  {renderProductoMasPedido(producto, cantidad, index)}
+                </View>
+              ))}
             </ThemedView>
           ) : (
             <ThemedView style={styles.emptyState}>
@@ -484,7 +547,11 @@ export default function ReportesScreen() {
             </ThemedView>
           ) : ordenesParaMostrar.length > 0 ? (
             <ThemedView style={styles.ordenesEntregadasLista}>
-              {ordenesParaMostrar.slice().reverse().map(renderOrdenEntregada)}
+              {ordenesParaMostrar.slice().reverse().map((orden) => (
+                <View key={orden.id}>
+                  {renderOrdenEntregada(orden)}
+                </View>
+              ))}
             </ThemedView>
           ) : (
             <ThemedView style={styles.emptyState}>
