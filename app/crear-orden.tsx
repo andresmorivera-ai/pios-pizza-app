@@ -32,11 +32,21 @@ interface ProductoSeleccionado {
   esNuevo?: boolean; // Flag para productos agregados durante actualización
 }
 
-
-
+// Interfaz de Orden General simplificada para carga
+interface OrdenGeneralCarga {
+  id: string;
+  tipo: string;
+  productos: string[];
+  total: number;
+  referencia?: string;
+}
 
 export default function CrearOrdenScreen() {
-  const { mesa } = useLocalSearchParams();
+  const params = useLocalSearchParams();
+  const mesa = params.mesa as string | undefined;
+  const idOrden = params.idOrden as string | undefined; // ID de la orden general (domicilio/llevar)
+  const tipoOrden = params.tipo as string | undefined; // Tipo: 'domicilios' o 'llevar'
+
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>('');
   const [productosSeleccionados, setProductosSeleccionados] = useState<ProductoSeleccionado[]>([]);
@@ -45,9 +55,15 @@ export default function CrearOrdenScreen() {
   const { agregarOrden, actualizarProductosOrden, getOrdenActivaPorMesa } = useOrdenes();
   const insets = useSafeAreaInsets();
   
-  // Detectar si la mesa tiene una orden en curso
-  const ordenEnCurso = getOrdenActivaPorMesa(mesa as string);
+  // Detectar si es una orden de MESA o una orden GENERAL (Domicilio/Llevar)
+  const esOrdenMesa = !!mesa;
+  const esOrdenGeneral = !!idOrden && !!tipoOrden;
 
+  // Detectar si la mesa tiene una orden en curso (solo para mesas)
+  const ordenMesaEnCurso = esOrdenMesa ? getOrdenActivaPorMesa(mesa) : null;
+  const [ordenGeneralEnCurso, setOrdenGeneralEnCurso] = useState<OrdenGeneralCarga | null>(null); // Nuevo estado para orden general
+  const ordenEnCurso = esOrdenMesa ? ordenMesaEnCurso : ordenGeneralEnCurso;
+  
   // Orden personalizado de categorías
   const ordenCategorias = ['pollo', 'adicional', 'bebidas', 'combo', 'postre'];
 
@@ -82,29 +98,78 @@ export default function CrearOrdenScreen() {
     obtenerProductos();
   }, []);
 
-  // Cargar productos existentes si hay orden en curso
+  // Función para parsear la cadena de producto a objeto ProductoSeleccionado
+  const parsearProducto = (prodStr: string, esNuevo: boolean): ProductoSeleccionado => {
+    // Formato: "Producto (tamaño) $20000 X2"
+    const nombreMatch = prodStr.match(/^(.+?)\s*\((.+?)\)\s*\$(\d+)\s*X(\d+)$/);
+    
+    if (nombreMatch) {
+      return {
+        nombre: nombreMatch[1].trim(),
+        tamano: nombreMatch[2],
+        precio: parseInt(nombreMatch[3]),
+        cantidad: parseInt(nombreMatch[4]),
+        esNuevo: esNuevo
+      };
+    }
+    
+    // Fallback o formato simplificado si el formato completo no coincide
+    const partes = prodStr.split(' X');
+    const cantidad = partes.length > 1 ? parseInt(partes[1]) : 1;
+    
+    const prodPrecio = partes[0].split(' $');
+    const precio = prodPrecio.length > 1 ? parseInt(prodPrecio[1]) : 0;
+    
+    const prodTamano = prodPrecio[0].split('(');
+    const nombre = prodTamano[0].trim();
+    const tamano = prodTamano.length > 1 ? prodTamano[1].replace(')', '').trim() : 'Unidad';
+    
+    return {
+      nombre,
+      tamano,
+      precio,
+      cantidad,
+      esNuevo
+    };
+  };
+
+  // Cargar productos existentes si hay orden en curso (Mesa o General)
   useEffect(() => {
-    if (ordenEnCurso) {
-      // Parsear productos existentes y convertirlos a ProductoSeleccionado
-      const productosExistentes: ProductoSeleccionado[] = ordenEnCurso.productos.map(prodStr => {
-        // Formato: "Producto (tamaño) $20000 X2"
-        const nombreMatch = prodStr.match(/^(.+?)\s*\(/);
-        const tamanoMatch = prodStr.match(/\((.+?)\)/);
-        const precioMatch = prodStr.match(/\$(\d+)/);
-        const cantidadMatch = prodStr.match(/X(\d+)/);
-        
-        return {
-          nombre: nombreMatch ? nombreMatch[1].trim() : '',
-          tamano: tamanoMatch ? tamanoMatch[1] : '',
-          precio: precioMatch ? parseInt(precioMatch[1]) : 0,
-          cantidad: cantidadMatch ? parseInt(cantidadMatch[1]) : 1,
-          esNuevo: false // Los productos existentes no son nuevos
+    // Lógica para Orden General existente
+    if (esOrdenGeneral && idOrden) {
+        const cargarOrdenGeneral = async () => {
+            const { data, error } = await supabase
+                .from('ordenesgenerales')
+                .select('id, tipo, productos, total, referencia')
+                .eq('id', idOrden)
+                .single();
+
+            if (error) {
+                console.error('Error cargando orden general:', error);
+                Alert.alert('Error', 'No se pudo cargar la orden general para actualizar.');
+                return;
+            }
+
+            if (data) {
+                setOrdenGeneralEnCurso(data as OrdenGeneralCarga);
+                const productosExistentes: ProductoSeleccionado[] = data.productos.map(prodStr => 
+                    parsearProducto(prodStr, false)
+                );
+                setProductosSeleccionados(productosExistentes);
+            }
         };
-      });
-      
+        cargarOrdenGeneral();
+        return;
+    }
+
+    // Lógica para Orden de Mesa existente
+    if (ordenMesaEnCurso) {
+      const productosExistentes: ProductoSeleccionado[] = ordenMesaEnCurso.productos.map(prodStr => 
+          parsearProducto(prodStr, false)
+      );
       setProductosSeleccionados(productosExistentes);
     }
-  }, [ordenEnCurso]);
+  }, [ordenMesaEnCurso, esOrdenGeneral, idOrden]);
 
   // Obtener categorías únicas y ordenarlas según ordenCategorias
   const categoriasUnicas = [...new Set(productos.map(p => p.categoria))];
@@ -167,6 +232,7 @@ export default function CrearOrdenScreen() {
   // Abrir modal para seleccionar tamaño
   const handleSeleccionarProducto = (producto: Producto) => {
     setProductoParaTamano(producto);
+    setVarianteSeleccionada(null); // Resetear la variante seleccionada
     setModalVisible(true);
   };
 
@@ -179,11 +245,11 @@ export default function CrearOrdenScreen() {
         precio: tamanoOpcion.precio || productoParaTamano.precio,
         cantidad: 1,
         descripcion: variante.descripcion,
-        esNuevo: !!ordenEnCurso // Si hay orden en curso, es un producto nuevo
+        esNuevo: !!ordenEnCurso // Si hay orden en curso (Mesa o General), es un producto nuevo para esa "ronda"
       };
       
       setProductosSeleccionados(prev => {
-        // Si hay orden en curso, siempre agregar como nuevo producto (no sumar cantidades)
+        // Si hay orden en curso (Mesa o General), siempre agregar como nuevo producto
         if (ordenEnCurso) {
           return [...prev, productoNuevo];
         }
@@ -217,7 +283,7 @@ export default function CrearOrdenScreen() {
     setProductosSeleccionados(prev => {
       const producto = prev[index];
       
-      // Si hay orden en curso (actualización) Y el producto NO es nuevo, agregar como nuevo producto
+      // Si hay orden en curso (actualización) Y el producto NO es nuevo, agregar como NUEVO producto
       if (ordenEnCurso && !producto.esNuevo) {
         const productoNuevo: ProductoSeleccionado = {
           ...producto,
@@ -242,14 +308,14 @@ export default function CrearOrdenScreen() {
       // Si hay orden en curso (actualización) Y el producto NO es nuevo, eliminar el último producto nuevo del mismo tipo
       if (ordenEnCurso && !producto.esNuevo) {
         // Buscar el último producto nuevo del mismo tipo (mismo nombre y tamaño)
-        const productosDelMismoTipo = prev.filter((p, i) => 
-          i > index && p.nombre === producto.nombre && p.tamano === producto.tamano && p.esNuevo
+        const productosNuevosDelMismoTipo = prev.filter((p) => 
+          p.nombre === producto.nombre && p.tamano === producto.tamano && p.esNuevo
         );
         
-        if (productosDelMismoTipo.length > 0) {
+        if (productosNuevosDelMismoTipo.length > 0) {
           // Encontrar el índice del último producto nuevo del mismo tipo
-          const ultimoIndice = prev.findLastIndex((p, i) => 
-            i > index && p.nombre === producto.nombre && p.tamano === producto.tamano && p.esNuevo
+          const ultimoIndice = prev.findLastIndex((p) => 
+            p.nombre === producto.nombre && p.tamano === producto.tamano && p.esNuevo
           );
           
           if (ultimoIndice !== -1) {
@@ -257,7 +323,7 @@ export default function CrearOrdenScreen() {
           }
         }
         
-        // Si no hay productos nuevos del mismo tipo, no hacer nada
+        // Si no hay productos nuevos del mismo tipo, no hacer nada (no se puede reducir el producto original)
         return prev;
       }
       
@@ -266,7 +332,7 @@ export default function CrearOrdenScreen() {
         i === index && p.cantidad > 1
           ? { ...p, cantidad: p.cantidad - 1 }
           : p
-      );
+      ).filter(p => p.cantidad > 0); // Eliminar si la cantidad llega a 0
     });
   };
 
@@ -283,9 +349,8 @@ export default function CrearOrdenScreen() {
   };
 
   // Confirmar orden
-  const handleConfirmarOrden = () => {
+  const handleConfirmarOrden = async () => {
     if (productosSeleccionados.length > 0) {
-      // Calcular total
       const totalOrden = calcularTotal();
       
       // Convertir a formato string con cantidad y precio incluidos
@@ -293,31 +358,59 @@ export default function CrearOrdenScreen() {
         p => `${p.nombre} (${p.tamano}) $${p.precio} X${p.cantidad}`
       );
       
-      // Si hay orden en curso, actualizar; si no, crear nueva
-      if (ordenEnCurso) {
-        actualizarProductosOrden(ordenEnCurso.id, productosFormateados, totalOrden);
-        
-        const listaProductos = productosSeleccionados
-          .map((producto, index) => `${index + 1}. ${producto.nombre} - ${producto.tamano} X${producto.cantidad}`)
-          .join('\n');
+      const listaProductos = productosSeleccionados
+        .map((producto, index) => `${index + 1}. ${producto.nombre} - ${producto.tamano} X${producto.cantidad}`)
+        .join('\n');
 
-        Alert.alert(
-          'Orden Actualizada',
-          `Orden actualizada para Mesa ${mesa}:\n\n${listaProductos}\n\nTotal: $${totalOrden.toLocaleString('es-CO')}`,
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
-      } else {
-        agregarOrden(mesa as string, productosFormateados, totalOrden);
+      if (esOrdenMesa) {
+        // Lógica de Mesa
+        if (ordenMesaEnCurso) {
+          // Actualizar Orden de Mesa existente
+          actualizarProductosOrden(ordenMesaEnCurso.id, productosFormateados, totalOrden);
+          Alert.alert(
+            'Orden Actualizada',
+            `Orden actualizada para Mesa ${mesa}:\n\n${listaProductos}\n\nTotal: $${totalOrden.toLocaleString('es-CO')}`,
+            [{ text: 'OK', onPress: () => router.back() }]
+          );
+        } else {
+          // Crear Orden de Mesa nueva
+          agregarOrden(mesa as string, productosFormateados, totalOrden);
+          Alert.alert(
+            'Orden Confirmada',
+            `Orden para Mesa ${mesa}:\n\n${listaProductos}\n\nTotal: $${totalOrden.toLocaleString('es-CO')}`,
+            [{ text: 'OK', onPress: () => router.back() }]
+          );
+        }
+      } else if (esOrdenGeneral) {
+        // Lógica de Orden General (Domicilio/Llevar)
+        if (ordenGeneralEnCurso) {
+          // Actualizar Orden General existente
+          try {
+            const { error } = await supabase
+              .from('ordenesgenerales')
+              .update({ 
+                productos: productosFormateados,
+                total: totalOrden,
+                estado: 'pendiente' // Reiniciar estado a pendiente al actualizar
+              })
+              .eq('id', idOrden);
+            
+            if (error) throw error;
 
-        const listaProductos = productosSeleccionados
-          .map((producto, index) => `${index + 1}. ${producto.nombre} - ${producto.tamano} X${producto.cantidad}`)
-          .join('\n');
+            Alert.alert(
+              'Orden Actualizada',
+              `Orden de ${tipoOrden} actualizada:\n\n${listaProductos}\n\nTotal: $${totalOrden.toLocaleString('es-CO')}`,
+              [{ text: 'OK', onPress: () => router.back() }]
+            );
+          } catch (error) {
+            console.error('Error actualizando orden general:', error);
+            Alert.alert('Error', 'No se pudo actualizar la orden general.');
+          }
 
-        Alert.alert(
-          'Orden Confirmada',
-          `Orden para Mesa ${mesa}:\n\n${listaProductos}\n\nTotal: $${totalOrden.toLocaleString('es-CO')}`,
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
+        } else {
+          // Crear Orden General nueva (esta pantalla no se usa para crear, solo actualizar, pero lo dejamos como fallback si se reutiliza)
+           Alert.alert('Error de Lógica', 'Esta pantalla solo debe usarse para actualizar órdenes generales, no para crearlas.');
+        }
       }
     } else {
       Alert.alert('Error', 'Por favor selecciona al menos un producto.');
@@ -325,23 +418,35 @@ export default function CrearOrdenScreen() {
   };
 
 
+  // Determinar el título y el icono de la cabecera
+  const tituloPantalla = esOrdenMesa ? `Mesa ${mesa}` : 
+                         esOrdenGeneral ? (tipoOrden === 'domicilios' ? 'Domicilio' : 'Para Llevar') : 
+                         'Crear Orden';
+  
+  const iconoInfo = esOrdenMesa ? 'table.furniture' :
+                    tipoOrden === 'domicilios' ? 'car.fill' :
+                    'bag.fill';
+
+
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
       <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 60, 60) }]}>
-        <Link href="/(tabs)/seleccionar-mesa" style={styles.backButton}>
+        <Link href="/(tabs)/pedidos" style={styles.backButton}>
           <IconSymbol name="chevron.left" size={24} color="#8B4513" />
         </Link>
         <ThemedText type="title" style={styles.title}>
-          Crear Orden
+          {esOrdenMesa ? 'Actualizar Orden' : 'Agregar Productos'}
         </ThemedText>
       </ThemedView>
 
       <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Información de la mesa */}
+        {/* Información de la mesa/orden general */}
         <ThemedView style={styles.mesaInfo}>
-          <IconSymbol name="table.furniture" size={32} color="#FF8C00" />
-          <ThemedText style={styles.mesaText}>Mesa {mesa}</ThemedText>
+          <IconSymbol name={iconoInfo} size={32} color="#FF8C00" />
+          <ThemedText style={styles.mesaText}>
+            {tituloPantalla}
+          </ThemedText>
         </ThemedView>
 
         {/* Aviso de Orden en Curso */}
@@ -349,8 +454,13 @@ export default function CrearOrdenScreen() {
           <ThemedView style={styles.avisoOrdenEnCurso}>
             <ThemedText style={styles.avisoTitulo}>⚠️ ORDEN EN CURSO ⚠️</ThemedText>
             <ThemedText style={styles.avisoSubtitulo}>
-              Esta mesa ya tiene productos. Puedes agregar más o modificar cantidades.
+              Esta orden ya tiene productos. Puedes agregar más o modificar cantidades.
             </ThemedText>
+            {ordenGeneralEnCurso?.referencia && (
+                <ThemedText style={styles.avisoSubtitulo}>
+                    **Ref:** {ordenGeneralEnCurso.referencia}
+                </ThemedText>
+            )}
           </ThemedView>
         )}
 

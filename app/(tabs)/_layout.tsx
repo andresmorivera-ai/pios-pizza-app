@@ -15,15 +15,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 function getVisibilityFlags(rolId: number | null) {
   switch (rolId) {
     case 1:
-      return { home: true, pedidos: true, cocina: true, inventario: true, reportes: true, caja: true };
+      return { home: true, pedidos: true, cocina: true, inventario: true, reportes: true, caja: true ,domicilios: true , ordenesGenerales: true};
     case 2:
-      return { home: true, pedidos: true, cocina: false, inventario: false, reportes: false, caja: false };
+      return { home: true, pedidos: true, cocina: false, inventario: false, reportes: false, caja: false ,domicilios: false , ordenesGenerales: false};
     case 3:
-      return { home: false, pedidos: false, cocina: false, inventario: false, reportes: false, caja: false };
+      return { home: false, pedidos: false, cocina: false, inventario: false, reportes: false, caja: false ,domicilios: false , ordenesGenerales: false};
     case 4:
-      return { home: true, pedidos: true, cocina: false, inventario: true, reportes: false, caja: true };
+      return { home: true, pedidos: true, cocina: false, inventario: true, reportes: false, caja: true ,domicilios: true , ordenesGenerales: true};
     default:
-      return { home: true, pedidos: true, cocina: false, inventario: false, reportes: false, caja: false };
+      return { home: true, pedidos: true, cocina: false, inventario: false, reportes: false, caja: false ,domicilios: false , ordenesGenerales: false};
   }
 }
 
@@ -114,6 +114,22 @@ export default function TabLayout() {
         name="CajaScreen"
         options={{
           title: 'Caja',
+          href: vis.caja ? undefined : null,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="creditcard.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="DomiciliosScreen"
+        options={{
+          title: 'Domicilios',
+          href: vis.caja ? undefined : null,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="creditcard.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="ordenesGenerales"
+        options={{
+          title: 'Pedidos Generales',
           href: vis.caja ? undefined : null,
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="creditcard.fill" color={color} />,
         }}

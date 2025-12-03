@@ -1,6 +1,7 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { supabase } from '@/scripts/lib/supabase';
 import { useAuth } from '@/utilidades/context/AuthContext';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useFocusEffect } from '@react-navigation/native';
@@ -8,8 +9,21 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, BackHandler, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-export default function CocinaScreen() {
+// Interfaz para órdenes generales (de la base de datos)
+interface OrdenGeneral {
+  id: string;
+  tipo: 'Domicilio' | 'Llevar';
+  referencia?: string;
+  productos: string[];
+  total: number;
+  estado: string;
+  created_at: string;
+}
 
+// Interfaz unificada para la cocina
+type OrdenUnificada = (Orden & { origen: 'mesa' }) | (OrdenGeneral & { origen: 'general' });
+
+export default function CocinaScreen() {
   // Bloquear botón físico de "volver"
   useFocusEffect(
     React.useCallback(() => {
@@ -22,34 +36,100 @@ export default function CocinaScreen() {
   const { ordenes, actualizarEstadoOrden } = useOrdenes();
   const { logout } = useAuth();
   const [ordenExpandida, setOrdenExpandida] = useState<string | null>(null);
-  const [detallesFake, setDetallesFake] = useState<Record<string, string[]>>({});
-  const [ordenesVisibles, setOrdenesVisibles] = useState<Orden[]>([]);
+  const [ordenesGenerales, setOrdenesGenerales] = useState<OrdenGeneral[]>([]);
+  const [ordenesVisibles, setOrdenesVisibles] = useState<OrdenUnificada[]>([]);
+  const [cargandoGenerales, setCargandoGenerales] = useState(false);
 
-  // Filtrar solo órdenes activas (mostrar todo excepto pagadas y pendiente_por_pagar sin productos nuevos)
+  // Función para cargar órdenes generales
+  const cargarOrdenesGenerales = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('ordenesgenerales')
+        .select('*')
+        .in('estado', ['pendiente', 'en_preparacion'])
+        .or('tipo.ilike.%domicilio%,tipo.ilike.%llevar%')
+        .order('creado_en', { ascending: false });
+
+      if (error) {
+        console.error('❌ Error cargando órdenes generales:', error);
+      } else if (data) {
+        console.log('✅ Órdenes cargadas:', data.length);
+        const generalesFiltradas: OrdenGeneral[] = data.filter(o =>
+          o.tipo.toLowerCase().includes('domicilio') || o.tipo.toLowerCase().includes('llevar')
+        ).map(o => ({
+          ...o,
+          tipo: o.tipo.toLowerCase().includes('domicilio') ? 'Domicilio' : 'Llevar'
+        }));
+        setOrdenesGenerales(generalesFiltradas);
+      }
+    } catch (error) {
+      console.error('❌ Error general cargando órdenes generales:', error);
+    } finally {
+      setCargandoGenerales(false);
+    }
+  };
+
+  // Cargar órdenes generales al montar y suscribirse a cambios en tiempo real
   useEffect(() => {
-    const nuevas = ordenes.filter(o => {
-      // Excluir órdenes pagadas
-      if (o.estado === 'pago') return false;
-      
-      // Si está en "pendiente_por_pagar" pero tiene productos nuevos, mostrarla
-      if (o.estado === 'pendiente_por_pagar' && o.productosNuevos && o.productosNuevos.length > 0) return true;
-      
-      // Si está en "pendiente_por_pagar" sin productos nuevos, ocultarla
-      if (o.estado === 'pendiente_por_pagar') return false;
-      
-      // Mostrar todas las demás (pendiente, en_preparacion, listo, entregado)
-      return true;
-    });
-    const nuevosDetalles: Record<string, string[]> = {};
+    setCargandoGenerales(true);
+    cargarOrdenesGenerales();
     
-    setDetallesFake(nuevosDetalles);
-    setOrdenesVisibles(nuevas);
-  }, [ordenes]);
+    // Polling: Recargar órdenes cada 3 segundos
+    const pollingInterval = setInterval(() => {
+      console.log('🔄 Recargando órdenes automáticamente...');
+      cargarOrdenesGenerales();
+    }, 3000);
+    
+    // Suscripción en tiempo real a cambios en la tabla ordenesgenerales
+    const subscription = supabase
+      .channel('ordenes-cocina-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Escucha INSERT, UPDATE y DELETE
+          schema: 'public',
+          table: 'ordenesgenerales'
+        },
+        (payload) => {
+          console.log('🔔 Cambio en tiempo real detectado:', payload);
+          // Recargar inmediatamente cuando hay un cambio
+          cargarOrdenesGenerales();
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Estado de suscripción:', status);
+      });
 
-  // Genera pasos de prueba
-  
+    return () => {
+      console.log('🔌 Desconectando suscripción y polling');
+      clearInterval(pollingInterval);
+      subscription.unsubscribe();
+    };
+  }, []);
 
-  const getEstadoColor = (estado: Orden['estado']) => {
+  // Unificar y filtrar las órdenes
+  useEffect(() => {
+    // 1. Filtrar órdenes de Mesa (desde el contexto) - solo pendiente y en_preparacion
+    const ordenesMesaVisibles: OrdenUnificada[] = ordenes
+      .filter(o => {
+        // Excluir órdenes en estado listo o posterior
+        if (o.estado === 'listo' || o.estado === 'pago') return false;
+        if (o.estado === 'pendiente_por_pagar' && o.productosNuevos && o.productosNuevos.length > 0) return true;
+        if (o.estado === 'pendiente_por_pagar') return false;
+        // Solo mostrar pendiente y en_preparacion
+        return o.estado === 'pendiente' || o.estado === 'en_preparacion';
+      })
+      .map(o => ({ ...o, origen: 'mesa' as const }));
+
+    // 2. Mapear órdenes Generales (desde Supabase) - ya filtradas en la query
+    const ordenesGeneralVisibles: OrdenUnificada[] = ordenesGenerales
+      .map(o => ({ ...o, origen: 'general' as const }));
+
+    // 3. Unir y establecer las órdenes visibles
+    setOrdenesVisibles([...ordenesGeneralVisibles, ...ordenesMesaVisibles]);
+  }, [ordenes, ordenesGenerales]);
+
+  const getEstadoColor = (estado: string) => {
     switch (estado) {
       case 'pendiente': return '#FF8C00';
       case 'en_preparacion': return '#2196F3';
@@ -58,7 +138,7 @@ export default function CocinaScreen() {
     }
   };
 
-  const getEstadoTexto = (estado: Orden['estado']) => {
+  const getEstadoTexto = (estado: string) => {
     switch (estado) {
       case 'pendiente': return 'Pendiente';
       case 'en_preparacion': return 'En preparación';
@@ -67,30 +147,58 @@ export default function CocinaScreen() {
     }
   };
 
-  const handleExpandirOrden = async (orden: Orden) => {
+  const actualizarEstadoGeneralEnDB = async (ordenId: string, nuevoEstado: string) => {
+    // Actualizar el estado local inmediatamente para feedback instantáneo
+    setOrdenesGenerales(prev => 
+      prev.map(o => o.id === ordenId ? { ...o, estado: nuevoEstado } : o)
+    );
+
+    const { error } = await supabase
+      .from('ordenesgenerales')
+      .update({ estado: nuevoEstado })
+      .eq('id', ordenId);
+
+    if (error) {
+      console.error('Error actualizando estado en DB:', error);
+      Alert.alert('Error', 'No se pudo actualizar el estado de la orden general.');
+      // Revertir el cambio local si hubo error
+      cargarOrdenesGenerales();
+    }
+  };
+
+  const handleExpandirOrden = async (orden: OrdenUnificada) => {
     const isExpanded = ordenExpandida === orden.id;
     if (isExpanded) {
-      // Contraer si ya está expandida
       setOrdenExpandida(null);
       return;
     }
 
-    // Cambiar automáticamente a “en_preparación” si estaba pendiente
+    // Cambiar automáticamente a "en_preparación" si estaba pendiente
     if (orden.estado === 'pendiente') {
-      await actualizarEstadoOrden(orden.id, 'en_preparacion');
+      if (orden.origen === 'mesa') {
+        await actualizarEstadoOrden(orden.id, 'en_preparacion');
+      } else {
+        await actualizarEstadoGeneralEnDB(orden.id, 'en_preparacion');
+      }
     }
 
-    // Expandir y contraer las demás
     setOrdenExpandida(orden.id);
   };
 
-  const handleMarcarListo = async (orden: Orden) => {
-    console.log('🍳 Marcando orden como lista:', orden.id, 'Estado actual:', orden.estado);
-    await actualizarEstadoOrden(orden.id, 'listo');
-    setTimeout(() => {
+  const handleMarcarListo = async (orden: OrdenUnificada) => {
+    console.log('🍳 Marcando orden como lista:', orden.id, 'Origen:', orden.origen);
+
+    if (orden.origen === 'mesa') {
+      await actualizarEstadoOrden(orden.id, 'listo');
+      // Remover inmediatamente de la vista
       setOrdenesVisibles((prev) => prev.filter((o) => o.id !== orden.id));
       if (ordenExpandida === orden.id) setOrdenExpandida(null);
-    }, 1000);
+    } else {
+      await actualizarEstadoGeneralEnDB(orden.id, 'listo');
+      // Remover inmediatamente de la vista
+      setOrdenesVisibles((prev) => prev.filter((o) => o.id !== orden.id));
+      if (ordenExpandida === orden.id) setOrdenExpandida(null);
+    }
   };
 
   const handleLogout = () => {
@@ -105,6 +213,26 @@ export default function CocinaScreen() {
         },
       },
     ]);
+  };
+
+  const getOrdenInfo = (orden: OrdenUnificada) => {
+    if (orden.origen === 'mesa') {
+      return {
+        texto: `Mesa ${orden.mesa}`,
+        tipoOrden: 'Mesa',
+        simbolo: 'table.furniture',
+        color: '#FF8C00'
+      };
+    } else {
+      const tipoOrden = orden.tipo;
+      const simbolo = tipoOrden === 'Domicilio' ? 'car.fill' : 'bag.fill';
+      return {
+        texto: tipoOrden,
+        tipoOrden: tipoOrden,
+        simbolo: simbolo,
+        color: '#9C27B0'
+      };
+    }
   };
 
   return (
@@ -127,15 +255,24 @@ export default function CocinaScreen() {
 
       {/* LISTA DE ÓRDENES */}
       <ScrollView style={styles.lista}>
-        {ordenesVisibles.length === 0 ? (
+        {ordenesVisibles.length === 0 && !cargandoGenerales ? (
           <View style={styles.emptyState}>
             <IconSymbol name="list.clipboard" size={64} color="#ccc" />
             <ThemedText style={styles.emptyTexto}>No hay órdenes pendientes</ThemedText>
           </View>
+        ) : cargandoGenerales ? (
+          <View style={styles.emptyState}>
+            <ThemedText style={styles.emptyTexto}>Cargando órdenes...</ThemedText>
+          </View>
         ) : (
           ordenesVisibles.map((orden) => {
             const expandida = ordenExpandida === orden.id;
-            const detalles = detallesFake[orden.id] || [];
+            const info = getOrdenInfo(orden);
+            const detalles: string[] = [];
+            const esMesa = orden.origen === 'mesa';
+            const productosNuevos = esMesa ? (orden as Orden).productosNuevos : undefined;
+            const productosListos = esMesa ? (orden as Orden).productosListos : undefined;
+            const productosEntregados = esMesa ? (orden as Orden).productosEntregados : undefined;
 
             return (
               <TouchableOpacity
@@ -147,46 +284,62 @@ export default function CocinaScreen() {
                 {/* Encabezado */}
                 <View style={styles.ordenHeader}>
                   <View style={styles.mesaInfo}>
-                    <IconSymbol name="table.furniture" size={20} color="#FF8C00" />
-                    <ThemedText style={styles.mesaTexto}>Mesa {orden.mesa}</ThemedText>
+                    <IconSymbol name={info.simbolo as any} size={20} color={info.color} />
+                    <View>
+                      <ThemedText style={styles.mesaTexto}>{info.texto}</ThemedText>
+                      <ThemedText style={styles.tipoOrdenTexto}>
+                        {info.tipoOrden === 'Mesa' ? 'Para Mesa' : 
+                         info.tipoOrden === 'Domicilio' ? 'Para Domicilio' : 
+                         'Para Llevar'}
+                      </ThemedText>
+                    </View>
                   </View>
                   <View style={[styles.estadoBadge, { backgroundColor: getEstadoColor(orden.estado) }]}>
                     <ThemedText style={styles.estadoTexto}>{getEstadoTexto(orden.estado)}</ThemedText>
                   </View>
                 </View>
 
-                {/* Si está expandida, muestra los productos, pasos y botón */}
+                {/* Si está expandida, muestra los productos y botón */}
                 {expandida && (
                   <>
+                    {orden.origen === 'general' && 'referencia' in orden && orden.referencia && (
+                      <View style={styles.referenciaContainer}>
+                        <IconSymbol name="info.circle" size={16} color="#666" />
+                        <ThemedText style={styles.referenciaTexto}>
+                            Referencia: {orden.referencia}
+                        </ThemedText>
+                      </View>
+                    )}
+                    
                     <View style={styles.productosContainer}>
                       {orden.productos && orden.productos.length > 0 ? (
                         orden.productos.map((producto, i) => {
                           const partes = producto.split(' X');
                           const nombre = partes[0].split(' $')[0].trim();
                           const cantidad = partes[1];
-                          const esProductoNuevo = orden.productosNuevos?.includes(i);
-                          const esProductoListo = orden.productosListos?.includes(i);
-                          const esProductoEntregado = orden.productosEntregados?.includes(i);
+                          const esProductoNuevo = productosNuevos?.includes(i);
+                          const esProductoListo = productosListos?.includes(i);
+                          const esProductoEntregado = productosEntregados?.includes(i);
                           
                           return (
                             <View key={i} style={styles.productoItemContainer}>
                               <View style={styles.productoItemInfo}>
                                 <ThemedText style={styles.productoItem}>• {nombre}</ThemedText>
-                                {esProductoNuevo && (
+                                {esMesa && esProductoNuevo && (
                                   <View style={styles.productoStatus}>
                                     <ThemedText style={[styles.productoStatusText, styles.nuevoTexto]}>
                                       Nuevo!
                                     </ThemedText>
                                   </View>
                                 )}
-                                {esProductoListo && !esProductoNuevo && (
+                                {esMesa && esProductoListo && !esProductoNuevo && (
                                   <View style={styles.productoStatus}>
                                     <ThemedText style={[styles.productoStatusText, styles.listoTexto]}>
                                       Listo
                                     </ThemedText>
                                   </View>
                                 )}
-                                {esProductoEntregado && !esProductoNuevo && !esProductoListo && (
+                                {esMesa && esProductoEntregado && !esProductoNuevo && !esProductoListo && (
                                   <View style={styles.productoStatus}>
                                     <ThemedText style={[styles.productoStatusText, styles.entregadoTexto]}>
                                       Entregado
@@ -253,10 +406,10 @@ const styles = StyleSheet.create({
   lista: { paddingHorizontal: 20, marginTop: 10 },
   ordenCard: {
     backgroundColor: '#fff',
-    
     padding: 16,
     marginBottom: 14,
     elevation: 3,
+    borderRadius: 12,
   },
   ordenExpandida: {
     backgroundColor: '#FFF8F0',
@@ -268,8 +421,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  mesaInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  mesaInfo: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8,
+    flex: 1,
+  },
   mesaTexto: { fontSize: 18, fontWeight: 'bold', color: '#8B4513' },
+  tipoOrdenTexto: { 
+    fontSize: 12, 
+    color: '#666', 
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
   estadoBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
   estadoTexto: { color: '#fff', fontSize: 12, fontWeight: '600' },
   productosContainer: { marginTop: 10, marginBottom: 8 },
@@ -346,4 +510,18 @@ const styles = StyleSheet.create({
   },
   emptyState: { alignItems: 'center', marginTop: 80 },
   emptyTexto: { color: '#888', marginTop: 10, fontSize: 16 },
+  referenciaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#f0f0f0',
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  referenciaTexto: {
+    fontSize: 12,
+    color: '#666',
+    flex: 1,
+  },
 });

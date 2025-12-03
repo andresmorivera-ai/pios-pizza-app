@@ -1,30 +1,92 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { supabase } from '@/scripts/lib/supabase';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
 import { router } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Interfaz para órdenes generales desde Supabase
+interface OrdenGeneral {
+  id: string;
+  tipo: string;
+  referencia?: string;
+  productos: string[];
+  total: number;
+  estado: string;
+  created_at: string;
+}
 
 export default function CobrarScreen() {
   const colorScheme = useColorScheme();
   const { ordenes } = useOrdenes();
   const insets = useSafeAreaInsets();
+  const [ordenesGenerales, setOrdenesGenerales] = useState<OrdenGeneral[]>([]);
+  const [cargando, setCargando] = useState(false);
+
+  // Cargar órdenes generales desde Supabase
+  const cargarOrdenesGenerales = useCallback(async () => {
+    setCargando(true);
+    try {
+      const { data, error } = await supabase
+        .from('ordenesgenerales')
+        .select('*')
+        .order('creado_en', { ascending: false });
+
+      if (error) {
+        console.error('Error cargando órdenes generales:', error);
+      } else if (data) {
+        setOrdenesGenerales(data);
+      }
+    } catch (error) {
+      console.error('Error general:', error);
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  // Cargar órdenes generales al montar
+  useEffect(() => {
+    cargarOrdenesGenerales();
+    
+    // Suscripción en tiempo real a cambios en ordenesgenerales
+    const subscription = supabase
+      .channel('ordenes-generales-cobrar-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ordenesgenerales'
+        },
+        () => {
+          cargarOrdenesGenerales();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [cargarOrdenesGenerales]);
 
   // Filtrar órdenes con estado "pendiente_por_pagar" (pendientes de pago)
-  const ordenesPendientes = ordenes.filter(orden => orden.estado === 'pendiente_por_pagar');
+  const ordenesPendientesMesas = ordenes.filter(orden => orden.estado === 'pendiente_por_pagar');
+  const ordenesGeneralesPendientes = ordenesGenerales.filter(orden => orden.estado === 'pendiente_por_pagar');
   
-  // Debug: Log para ver qué órdenes hay
-  console.log('🏪 [Cobrar] Total órdenes:', ordenes.length);
-  console.log('🏪 [Cobrar] Órdenes por estado:', ordenes.reduce((acc, o) => {
-    acc[o.estado] = (acc[o.estado] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>));
-  console.log('🏪 [Cobrar] Órdenes pendientes de pago:', ordenesPendientes.length);
-  console.log('🏪 [Cobrar] IDs de órdenes:', ordenes.map(o => `${o.id} (${o.estado})`));
+  // Combinar todas las órdenes pendientes
+  const todasLasOrdenesPendientes = ordenesPendientesMesas.length + ordenesGeneralesPendientes.length;
 
-  // Navegar a detalles de cobro
+  // Debug: Log para ver qué órdenes hay
+  console.log('🏪 [Cobrar] Total órdenes mesas:', ordenes.length);
+  console.log('🏪 [Cobrar] Total órdenes generales:', ordenesGenerales.length);
+  console.log('🏪 [Cobrar] Órdenes pendientes mesas:', ordenesPendientesMesas.length);
+  console.log('🏪 [Cobrar] Órdenes pendientes generales:', ordenesGeneralesPendientes.length);
+
+  // Navegar a detalles de cobro para mesas
   const handleCobrarOrden = (orden: Orden) => {
     router.push({
       pathname: '/detalles-cobro',
@@ -37,8 +99,21 @@ export default function CobrarScreen() {
     });
   };
 
-  // Renderizar cada orden pendiente
-  const renderOrden = ({ item }: { item: Orden }) => (
+  // Navegar a detalles de cobro para órdenes generales
+  const handleCobrarOrdenGeneral = (orden: OrdenGeneral) => {
+    router.push({
+      pathname: '/detalles-cobro',
+      params: {
+        ordenId: orden.id,
+        mesa: orden.tipo,
+        total: orden.total.toString(),
+        productos: JSON.stringify(orden.productos)
+      }
+    });
+  };
+
+  // Renderizar cada orden de mesa pendiente
+  const renderOrdenMesa = ({ item }: { item: Orden }) => (
     <View style={styles.ordenCard}>
       <View style={styles.ordenHeader}>
         <View style={styles.mesaContainer}>
@@ -67,18 +142,58 @@ export default function CobrarScreen() {
     </View>
   );
 
+  // Renderizar cada orden general pendiente
+  const renderOrdenGeneral = ({ item }: { item: OrdenGeneral }) => (
+    <View style={styles.ordenCard}>
+      <View style={styles.ordenHeader}>
+        <View style={styles.mesaContainer}>
+          <IconSymbol 
+            name={item.tipo.toLowerCase().includes('domicilio') ? 'car.fill' : 'bag.fill'} 
+            size={20} 
+            color="#8B4513" 
+          />
+          <ThemedText style={styles.mesaText}>{item.tipo}</ThemedText>
+        </View>
+        <ThemedText style={styles.totalText}>${item.total.toLocaleString()}</ThemedText>
+      </View>
+      
+      {item.referencia && (
+        <View style={styles.referenciaContainer}>
+          <IconSymbol name="info.circle" size={14} color="#666" />
+          <ThemedText style={styles.referenciaText}>{item.referencia}</ThemedText>
+        </View>
+      )}
+
+      <View style={styles.ordenInfo}>
+        <ThemedText style={styles.itemsText}>
+          {item.productos.length} {item.productos.length === 1 ? 'item' : 'items'}
+        </ThemedText>
+        <ThemedText style={styles.fechaText}>
+          {new Date(item.created_at).toLocaleString()}
+        </ThemedText>
+      </View>
+
+      <TouchableOpacity 
+        style={styles.cobrarButton} 
+        onPress={() => handleCobrarOrdenGeneral(item)}
+      >
+        <IconSymbol name="creditcard.fill" size={20} color="#fff" />
+        <ThemedText style={styles.cobrarButtonText}>Cobrar $</ThemedText>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
       <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 40, 40) }]}>
         <ThemedText type="title" style={styles.title}>
-          Mesas por pagar
+          Órdenes por pagar
         </ThemedText>
       </ThemedView>
 
       {/* Lista de órdenes pendientes */}
-      {ordenesPendientes.length === 0 ? (
+      {todasLasOrdenesPendientes === 0 ? (
         <ThemedView style={styles.emptyContainer}>
           <IconSymbol name="checkmark.circle.fill" size={64} color="#32CD32" />
           <ThemedText style={styles.emptyTitle}>No hay órdenes pendientes</ThemedText>
@@ -92,9 +207,17 @@ export default function CobrarScreen() {
           contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 20) }}
           showsVerticalScrollIndicator={false}
         >
-          {ordenesPendientes.map((orden) => (
-            <View key={orden.id}>
-              {renderOrden({ item: orden })}
+          {/* Renderizar órdenes de mesas */}
+          {ordenesPendientesMesas.map((orden) => (
+            <View key={`mesa-${orden.id}`}>
+              {renderOrdenMesa({ item: orden })}
+            </View>
+          ))}
+
+          {/* Renderizar órdenes generales (domicilios y llevar) */}
+          {ordenesGeneralesPendientes.map((orden) => (
+            <View key={`general-${orden.id}`}>
+              {renderOrdenGeneral({ item: orden })}
             </View>
           ))}
         </ScrollView>
@@ -125,7 +248,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
-    marginTop: -100, // Mueve el contenido hacia arriba para centrarlo mejor
+    marginTop: -100,
   },
   emptyTitle: {
     fontSize: 24,
@@ -177,6 +300,20 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#32CD32',
+  },
+  referenciaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#f0f0f0',
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  referenciaText: {
+    fontSize: 12,
+    color: '#666',
+    flex: 1,
   },
   ordenInfo: {
     marginBottom: 16,
