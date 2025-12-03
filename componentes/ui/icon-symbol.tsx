@@ -42,6 +42,10 @@ const MAPPING = {
   'chart.line.uptrend.xyaxis': 'trending-up',
   'exclamationmark.triangle': 'warning',
   'arrow.left': 'arrow-back',
+  'fork.knife': 'restaurant',
+  'cart.fill': 'shopping-cart',
+  'person.2.fill': 'people',
+  'flame.fill': 'local-fire-department',
 } as IconMapping;
 
 /**

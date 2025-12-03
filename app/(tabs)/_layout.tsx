@@ -91,7 +91,7 @@ export default function TabLayout() {
         options={{
           title: 'Cocina',
           href: vis.cocina ? undefined : null,
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.bar.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="fork.knife" color={color} />,
         }}
       />
       <Tabs.Screen

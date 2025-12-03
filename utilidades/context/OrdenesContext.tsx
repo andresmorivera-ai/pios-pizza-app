@@ -1,6 +1,13 @@
 import { supabase } from '@/scripts/lib/supabase';
+<<<<<<< HEAD
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
+=======
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { Alert, Vibration } from 'react-native';
+import { useAuth } from './AuthContext';
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
 
 // ------------------- INTERFACES -------------------
 export interface Orden {
@@ -8,14 +15,36 @@ export interface Orden {
   mesa: string;
   productos: string[];
   total: number;
+<<<<<<< HEAD
   estado: 'disponible' | 'pendiente' | 'en_preparacion' | 'listo' | 'entregado' | 'pendiente_por_pagar' | 'pago';
+=======
+  estado:
+  | 'disponible'
+  | 'pendiente'
+  | 'en_preparacion'
+  | 'listo'
+  | 'pendiente_por_pagar'
+  | 'entregado'
+  | 'pago'
+  | 'cancelado';
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
   fechaCreacion: Date;
   fechaEntrega?: Date;
   metodoPago?: 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta';
   productosNuevos?: number[];
+<<<<<<< HEAD
   idVenta?: string;
 }
 
+=======
+  productosListos?: number[];
+  productosEntregados?: number[];
+  idVenta?: string;
+}
+
+const STORAGE_KEY = 'ordenes_del_dia';
+
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
 interface OrdenesContextType {
   ordenes: Orden[];
   ordenesEntregadas: Orden[];
@@ -30,17 +59,22 @@ interface OrdenesContextType {
   loading: boolean;
 }
 
-// ------------------- CONTEXTO -------------------
 const OrdenesContext = createContext<OrdenesContextType | undefined>(undefined);
 
 export function OrdenesProvider({ children }: { children: ReactNode }) {
   const [ordenes, setOrdenes] = useState<Orden[]>([]);
   const [ordenesEntregadas, setOrdenesEntregadas] = useState<Orden[]>([]);
+<<<<<<< HEAD
   const [loading, setLoading] = useState(true);
+=======
+  const { usuario } = useAuth();
+  const usuarioRef = useRef(usuario);
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
 
-  // ------------------- FUNCIONES AUXILIARES -------------------
+  useEffect(() => {
+    usuarioRef.current = usuario;
+  }, [usuario]);
 
-  // Obtener inicio y fin del día actual (hora local)
   const getInicioYFinDia = () => {
     const hoy = new Date();
     const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0, 0);
@@ -48,6 +82,7 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
     return { inicioDia, finDia };
   };
 
+<<<<<<< HEAD
   // Convertir datos de Supabase a Orden
   const convertirDeSupabase = (o: any): Orden => ({
     id: o.id,
@@ -63,6 +98,58 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
 
   // Cargar órdenes activas desde Supabase (solo del día actual, sin estado 'pago')
   const cargarOrdenesActivas = async () => {
+=======
+  const guardarOrdenesEnStorage = async (ordenesParaGuardar: Orden[]) => {
+    try {
+      const hoy = new Date();
+      const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+
+      const ordenesDelDia = ordenesParaGuardar.filter(orden => {
+        const fechaCreacion = orden.fechaCreacion;
+        return fechaCreacion >= inicioDia && orden.estado !== 'pago';
+      });
+
+      const ordenesUnicas = uniqueOrdersById(ordenesDelDia);
+      const ordenesSerializadas = ordenesUnicas.map(orden => ({
+        ...orden,
+        fechaCreacion: orden.fechaCreacion.toISOString(),
+        fechaEntrega: orden.fechaEntrega ? orden.fechaEntrega.toISOString() : undefined,
+      }));
+
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(ordenesSerializadas));
+    } catch (error) {
+      logError('Error guardando órdenes en AsyncStorage', error);
+    }
+  };
+
+  const cargarOrdenesDesdeStorage = async (): Promise<Orden[]> => {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEY);
+      if (!data) return [];
+
+      const ordenesSerializadas = JSON.parse(data);
+      const hoy = new Date();
+      const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+
+      const ordenesDelDia = ordenesSerializadas
+        .map((o: any) => ({
+          ...o,
+          fechaCreacion: new Date(o.fechaCreacion),
+          fechaEntrega: o.fechaEntrega ? new Date(o.fechaEntrega) : undefined,
+        }))
+        .filter((orden: Orden) => {
+          return orden.fechaCreacion >= inicioDia && orden.estado !== 'pago';
+        });
+
+      return ordenesDelDia;
+    } catch (error) {
+      logError('Error cargando órdenes desde AsyncStorage', error);
+      return [];
+    }
+  };
+
+  const cargarOrdenesDesdeSupabase = async (ordenesLocales: Orden[] = []): Promise<Orden[]> => {
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
     try {
       const { inicioDia, finDia } = getInicioYFinDia();
 
@@ -79,10 +166,42 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
         return [];
       }
 
+<<<<<<< HEAD
       const ordenesCargadas = (data || []).map(convertirDeSupabase);
       
       console.log('📦 Órdenes activas cargadas:', ordenesCargadas.length);
       
+=======
+      if (!data) return [];
+
+      const hoy = new Date();
+      const inicioDiaLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+
+      const ordenesCargadas = uniqueOrdersById(
+        data
+          .map((o) => {
+            const ordenExistente = ordenesLocales.find(orden => orden.id === o.id);
+            return {
+              id: o.id,
+              mesa: o.mesa,
+              productos: o.productos || [],
+              total: o.total,
+              estado: mapEstadoBDToLocal(o.estado),
+              fechaCreacion: new Date(o.fecha_creacion),
+              fechaEntrega: o.fecha_entrega ? new Date(o.fecha_entrega) : undefined,
+              metodoPago: o.metodo_pago,
+              idVenta: o.id_venta,
+              productosNuevos: ordenExistente?.productosNuevos,
+              productosEntregados: ordenExistente?.productosEntregados,
+            };
+          })
+          .filter((orden) => {
+            const fechaCreacion = orden.fechaCreacion;
+            return fechaCreacion >= inicioDiaLocal && orden.estado !== 'pago';
+          })
+      );
+
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
       return ordenesCargadas;
     } catch (error) {
       console.error('❌ Error en cargarOrdenesActivas:', error);
@@ -90,6 +209,7 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
     }
   };
 
+<<<<<<< HEAD
   // Cargar órdenes pagadas del día
   const cargarOrdenesPagadas = async () => {
     try {
@@ -106,6 +226,17 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
       if (error) {
         console.error('❌ Error cargando órdenes pagadas:', error);
         return [];
+=======
+  useEffect(() => {
+    const cargarOrdenes = async () => {
+      const ordenesStorage = await cargarOrdenesDesdeStorage();
+      let ordenesCargadas = await cargarOrdenesDesdeSupabase(ordenesStorage);
+
+      if (ordenesCargadas.length === 0 && ordenesStorage.length > 0) {
+        ordenesCargadas = ordenesStorage;
+      } else {
+        await guardarOrdenesEnStorage(ordenesCargadas);
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
       }
 
       const ordenesPagadas = (data || []).map(convertirDeSupabase);
@@ -136,7 +267,10 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
 
     inicializar();
 
+<<<<<<< HEAD
     // Suscripción en tiempo real a cambios en "ordenes"
+=======
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
     const canal = supabase
       .channel('ordenes-realtime')
       .on(
@@ -149,6 +283,7 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
 
           if (payload.eventType === 'INSERT') {
             const nueva = payload.new as any;
+<<<<<<< HEAD
             
             // Verificar si es del día actual
             const fechaCreacion = new Date(nueva.fecha_creacion);
@@ -225,6 +360,102 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
             
             setOrdenes((prev) => prev.filter((o) => o.id !== eliminada.id));
             setOrdenesEntregadas((prev) => prev.filter((o) => o.id !== eliminada.id));
+=======
+
+            if (nueva.estado === 'pago') return;
+
+            const fechaCreacion = new Date(nueva.fecha_creacion);
+            if (fechaCreacion < inicioDia || fechaCreacion > finDia) return;
+
+            const ordenNueva: Orden = {
+              id: nueva.id,
+              mesa: nueva.mesa,
+              productos: nueva.productos || [],
+              total: nueva.total,
+              estado: mapEstadoBDToLocal(nueva.estado),
+              fechaCreacion: fechaCreacion,
+              fechaEntrega: nueva.fecha_entrega ? new Date(nueva.fecha_entrega) : undefined,
+              metodoPago: nueva.metodo_pago,
+              idVenta: nueva.id_venta,
+            };
+
+            setOrdenes((prev) => {
+              const nuevas = uniqueOrdersById([ordenNueva, ...prev]);
+              guardarOrdenesEnStorage(nuevas);
+              return nuevas;
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const actualizada = payload.new as any;
+
+            if (actualizada.estado === 'pago') {
+              setOrdenes((prev) => {
+                const nuevas = prev.filter((o) => o.id !== actualizada.id);
+                guardarOrdenesEnStorage(nuevas);
+                return nuevas;
+              });
+              return;
+            }
+
+            const fechaCreacion = new Date(actualizada.fecha_creacion);
+            if (fechaCreacion < inicioDia || fechaCreacion > finDia) return;
+
+            // Vibración para mesero cuando está listo
+            if (actualizada.estado === 'listo' && usuarioRef.current?.rol_id === 2) {
+              try {
+                Vibration.vibrate([0, 500, 200, 500]);
+              } catch (error) {
+                // Silenciar error de vibración
+              }
+            }
+
+            setOrdenes((prev) => {
+              const ordenExistente = prev.find((o) => o.id === actualizada.id);
+
+              if (ordenExistente) {
+                const estadoLocal = mapEstadoBDToLocal(actualizada.estado);
+                const nuevas = prev.map((o) =>
+                  o.id === actualizada.id
+                    ? {
+                      ...o,
+                      estado: estadoLocal,
+                      productos: actualizada.productos || o.productos,
+                      total: actualizada.total || o.total,
+                      fechaEntrega: actualizada.fecha_entrega ? new Date(actualizada.fecha_entrega) : o.fechaEntrega,
+                      metodoPago: actualizada.metodo_pago || o.metodoPago,
+                      idVenta: actualizada.id_venta || o.idVenta,
+                    }
+                    : o
+                );
+                guardarOrdenesEnStorage(nuevas);
+                return nuevas;
+              } else {
+                if (actualizada.estado !== 'pago') {
+                  const nuevaOrden: Orden = {
+                    id: actualizada.id,
+                    mesa: actualizada.mesa,
+                    productos: actualizada.productos || [],
+                    total: actualizada.total,
+                    estado: mapEstadoBDToLocal(actualizada.estado),
+                    fechaCreacion: new Date(actualizada.fecha_creacion),
+                    fechaEntrega: actualizada.fecha_entrega ? new Date(actualizada.fecha_entrega) : undefined,
+                    metodoPago: actualizada.metodo_pago,
+                    idVenta: actualizada.id_venta,
+                  };
+                  const nuevas = uniqueOrdersById([nuevaOrden, ...prev]);
+                  guardarOrdenesEnStorage(nuevas);
+                  return nuevas;
+                }
+              }
+
+              return prev;
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setOrdenes((prev) => {
+              const nuevas = prev.filter((o) => o.id !== payload.old.id);
+              guardarOrdenesEnStorage(nuevas);
+              return nuevas;
+            });
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
           }
         }
       )
@@ -235,14 +466,21 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+<<<<<<< HEAD
   // ------------------- FUNCIONES CRUD -------------------
 
   // Crear una nueva orden
+=======
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
   const agregarOrden = async (mesa: string, productos: string[], total: number) => {
     try {
       const fechaCreacion = new Date();
 
+<<<<<<< HEAD
       const { data, error } = await supabase
+=======
+      const { data: nuevaOrdenBD, error } = await supabase
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
         .from('ordenes')
         .insert([
           {
@@ -257,6 +495,7 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (error) {
+<<<<<<< HEAD
         console.error('❌ Error creando orden:', error);
         Alert.alert('Error', 'No se pudo crear la orden');
         return;
@@ -265,6 +504,40 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
       console.log('✅ Orden creada exitosamente:', data.id);
 
       // Actualizar estado de la mesa
+=======
+        logError('Error guardando orden en Supabase', error);
+        const nuevaOrden: Orden = {
+          id: `orden-${Date.now()}`,
+          mesa,
+          productos,
+          total,
+          estado: 'pendiente',
+          fechaCreacion,
+        };
+        setOrdenes((prev) => {
+          const nuevas = uniqueOrdersById([nuevaOrden, ...prev]);
+          guardarOrdenesEnStorage(nuevas);
+          return nuevas;
+        });
+        return;
+      }
+
+      const nuevaOrden: Orden = {
+        id: nuevaOrdenBD.id,
+        mesa,
+        productos,
+        total,
+        estado: 'pendiente',
+        fechaCreacion: new Date(nuevaOrdenBD.fecha_creacion),
+      };
+
+      setOrdenes((prev) => {
+        const nuevas = uniqueOrdersById([nuevaOrden, ...prev]);
+        guardarOrdenesEnStorage(nuevas);
+        return nuevas;
+      });
+
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
       await supabase
         .from('mesas')
         .update({ estado: 'pendiente' })
@@ -279,9 +552,13 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
   // Actualizar productos de una orden
   const actualizarProductosOrden = async (id: string, productosNuevos: string[], totalNuevo: number) => {
     try {
+<<<<<<< HEAD
       // Obtener productos originales
       const ordenActual = ordenes.find(o => o.id === id);
       const productosOriginales = ordenActual?.productos.length || 0;
+=======
+      const nuevoEstado: Orden['estado'] = 'pendiente';
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
 
       const { error } = await supabase
         .from('ordenes')
@@ -292,6 +569,7 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
         .eq('id', id);
 
       if (error) {
+<<<<<<< HEAD
         console.error('❌ Error actualizando productos:', error);
         Alert.alert('Error', 'No se pudieron actualizar los productos');
         return;
@@ -316,12 +594,97 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
         return orden;
       }));
 
+=======
+        logError('Error actualizando productos en Supabase', error);
+      }
+
+      setOrdenes(prev => {
+        const nuevas = prev.map(orden => {
+          if (orden.id === id) {
+            const cantidadOriginal = orden.productos.length;
+            const productosNuevosIndices: number[] = [];
+            const productosListosIndices: number[] = [];
+            const productosEntregadosIndices: number[] = [];
+
+            for (let i = 0; i < productosNuevos.length; i++) {
+              if (i >= cantidadOriginal) {
+                productosNuevosIndices.push(i);
+              } else {
+                if (orden.productosEntregados?.includes(i)) {
+                  productosEntregadosIndices.push(i);
+                } else if (orden.productosListos?.includes(i)) {
+                  productosListosIndices.push(i);
+                }
+              }
+            }
+
+            return {
+              ...orden,
+              productos: productosNuevos,
+              total: totalNuevo,
+              productosNuevos: productosNuevosIndices,
+              productosListos: productosListosIndices,
+              productosEntregados: productosEntregadosIndices,
+              estado: nuevoEstado,
+            };
+          }
+          return orden;
+        });
+        guardarOrdenesEnStorage(nuevas);
+        return nuevas;
+      });
+    } catch (error) {
+      logError('Error en actualizarProductosOrden', error);
+    }
+  };
+
+  const procesarPago = async (id: string, metodoPago: 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta', idVenta?: string) => {
+    try {
+      const idString = String(id);
+      const ordenAPagar = ordenes.find(orden => String(orden.id) === idString);
+
+      if (!ordenAPagar) {
+        Alert.alert('Error', 'Orden no encontrada');
+        return;
+      }
+
+      setOrdenes(prev => {
+        const nuevas = prev.filter(orden => String(orden.id) !== idString);
+        guardarOrdenesEnStorage(nuevas);
+        return nuevas;
+      });
+
+      const ordenPagada: Orden = {
+        ...ordenAPagar,
+        estado: 'pago',
+        fechaEntrega: new Date(),
+        metodoPago,
+        idVenta
+      };
+
+      setOrdenesEntregadas(prev => [...prev, ordenPagada]);
+
+      const { error } = await supabase
+        .from('ordenes')
+        .delete()
+        .eq('id', idString);
+
+      if (error) {
+        logError('Error eliminando orden de Supabase', error);
+      }
+
+      await supabase
+        .from('mesas')
+        .update({ estado: 'disponible' })
+        .eq('numero_mesa', ordenAPagar.mesa);
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
     } catch (error) {
       console.error('❌ Error en actualizarProductosOrden:', error);
       Alert.alert('Error', 'Error al actualizar productos');
     }
   };
 
+<<<<<<< HEAD
   // Cambiar estado de una orden
   const actualizarEstadoOrden = async (id: string, nuevoEstado: Orden['estado']) => {
     try {
@@ -333,18 +696,35 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
 
       console.log(`🔄 Actualizando orden ${id} a estado "${nuevoEstado}"`);
 
+=======
+  const actualizarEstadoOrden = async (id: string, nuevoEstado: Orden['estado']) => {
+    try {
+      const ordenAActualizar = ordenes.find((o) => o.id === id);
+      if (!ordenAActualizar) return;
+
+      const estadoParaBD = nuevoEstado === 'pendiente_por_pagar' ? 'entregado' : nuevoEstado;
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
       const updateData: any = {
         estado: nuevoEstado,
       };
 
+<<<<<<< HEAD
       // Si el estado es "entregado" o "pago", agregar fecha de entrega
       if (nuevoEstado === 'listo' || nuevoEstado === 'pago') {
+=======
+      if (
+        nuevoEstado === 'pendiente_por_pagar' ||
+        nuevoEstado === 'entregado' ||
+        nuevoEstado === 'pago'
+      ) {
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
         updateData.fecha_entrega = new Date().toISOString();
       }
 
       const { error } = await supabase
         .from('ordenes')
         .update(updateData)
+<<<<<<< HEAD
         .eq('id', id);
 
       if (error) {
@@ -357,6 +737,79 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
 
       // Actualizar estado de la mesa
       if (nuevoEstado === 'pago') {
+=======
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        logError('Error actualizando estado en Supabase', error);
+        const mensaje = formatError(error);
+        Alert.alert('Error', `No se pudo actualizar el estado: ${mensaje}`);
+        return;
+      }
+
+      if (nuevoEstado === 'pago') {
+        const ordenActualizada: Orden = {
+          ...ordenAActualizar,
+          estado: 'pago',
+          fechaEntrega: new Date(),
+        };
+
+        setOrdenesEntregadas((prevEntregadas) => [...prevEntregadas, ordenActualizada]);
+
+        setOrdenes((prev) => {
+          const sinPago = prev.filter((orden) => orden.id !== id);
+          guardarOrdenesEnStorage(sinPago);
+          return sinPago;
+        });
+      } else {
+        setOrdenes((prev) => {
+          const nuevas = prev.map((orden) => {
+            if (orden.id === id) {
+              const necesitaFechaEntrega =
+                nuevoEstado === 'pendiente_por_pagar' || nuevoEstado === 'entregado';
+
+              let productosListosActualizados = orden.productosListos || [];
+              if (nuevoEstado === 'listo') {
+                const nuevosAListos = orden.productosNuevos || [];
+                productosListosActualizados = [...productosListosActualizados, ...nuevosAListos];
+
+                if (nuevosAListos.length === 0) {
+                  productosListosActualizados = Array.from(
+                    { length: orden.productos.length },
+                    (_, i) => i
+                  ).filter(i => !(orden.productosEntregados || []).includes(i));
+                }
+              }
+
+              let productosEntregadosActualizados = orden.productosEntregados || [];
+              if (nuevoEstado === 'entregado' || nuevoEstado === 'pendiente_por_pagar') {
+                productosEntregadosActualizados = [...(orden.productosListos || [])];
+                productosListosActualizados = [];
+              }
+
+              const limpiarMarcasNuevos = ['listo', 'pendiente_por_pagar', 'pago'].includes(nuevoEstado);
+
+              const ordenActualizada = {
+                ...orden,
+                estado: nuevoEstado,
+                fechaEntrega: necesitaFechaEntrega ? new Date() : orden.fechaEntrega,
+                productosNuevos: limpiarMarcasNuevos ? [] : orden.productosNuevos,
+                productosListos: productosListosActualizados,
+                productosEntregados: productosEntregadosActualizados,
+              };
+              return ordenActualizada;
+            }
+            return orden;
+          });
+          guardarOrdenesEnStorage(nuevas);
+          return nuevas;
+        });
+      }
+
+      if (nuevoEstado === 'pago') {
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
         await supabase
           .from('mesas')
           .update({ estado: 'disponible' })
@@ -374,6 +827,7 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
     }
   };
 
+<<<<<<< HEAD
   // Procesar pago de una orden
   const procesarPago = async (id: string, metodoPago: 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta', idVenta?: string) => {
     try {
@@ -420,6 +874,10 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
     try {
       console.log(`🗑️ Eliminando orden ${id}`);
 
+=======
+  const eliminarOrden = async (id: string) => {
+    try {
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
       const { error } = await supabase
         .from('ordenes')
         .delete()
@@ -431,25 +889,36 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+<<<<<<< HEAD
       console.log('✅ Orden eliminada exitosamente');
 
+=======
+      setOrdenes((prev) => {
+        const nuevas = prev.filter((orden) => orden.id !== id);
+        guardarOrdenesEnStorage(nuevas);
+        return nuevas;
+      });
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
     } catch (error) {
       console.error('❌ Error en eliminarOrden:', error);
       Alert.alert('Error', 'Error al eliminar la orden');
     }
   };
 
+<<<<<<< HEAD
   // ------------------- FILTROS -------------------
   const getOrdenesPorMesa = (mesa: string) => 
     ordenes.filter((orden) => orden.mesa === mesa);
   
+=======
+  const getOrdenesPorMesa = (mesa: string) => ordenes.filter((orden) => orden.mesa === mesa);
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
   const getOrdenActivaPorMesa = (mesa: string) =>
     ordenes.find((orden) => orden.mesa === mesa && orden.estado !== 'pago') || null;
   
   const getOrdenesPendientes = () => 
     ordenes.filter((orden) => orden.estado === 'pendiente');
 
-  // ------------------- VALUE -------------------
   const value = {
     ordenes,
     ordenesEntregadas,

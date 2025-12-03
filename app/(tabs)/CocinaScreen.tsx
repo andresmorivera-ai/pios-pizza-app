@@ -1,13 +1,15 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+<<<<<<< HEAD
 import { supabase } from '@/scripts/lib/supabase';
 import { useAuth } from '@/utilidades/context/AuthContext';
+=======
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useFocusEffect } from '@react-navigation/native';
-import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, BackHandler, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { BackHandler, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 // Interfaz para órdenes generales (de la base de datos)
 interface OrdenGeneral {
@@ -34,7 +36,6 @@ export default function CocinaScreen() {
   );
 
   const { ordenes, actualizarEstadoOrden } = useOrdenes();
-  const { logout } = useAuth();
   const [ordenExpandida, setOrdenExpandida] = useState<string | null>(null);
   const [ordenesGenerales, setOrdenesGenerales] = useState<OrdenGeneral[]>([]);
   const [ordenesVisibles, setOrdenesVisibles] = useState<OrdenUnificada[]>([]);
@@ -71,6 +72,7 @@ export default function CocinaScreen() {
 
   // Cargar órdenes generales al montar y suscribirse a cambios en tiempo real
   useEffect(() => {
+<<<<<<< HEAD
     setCargandoGenerales(true);
     cargarOrdenesGenerales();
     
@@ -130,6 +132,28 @@ export default function CocinaScreen() {
   }, [ordenes, ordenesGenerales]);
 
   const getEstadoColor = (estado: string) => {
+=======
+    const nuevas = ordenes.filter(o => {
+      // Excluir órdenes pagadas
+      if (o.estado === 'pago') return false;
+
+      // Si está en "pendiente_por_pagar" pero tiene productos nuevos, mostrarla
+      if (o.estado === 'pendiente_por_pagar' && o.productosNuevos && o.productosNuevos.length > 0) return true;
+
+      // Si está en "pendiente_por_pagar" sin productos nuevos, ocultarla
+      if (o.estado === 'pendiente_por_pagar') return false;
+
+      // Mostrar todas las demás (pendiente, en_preparacion, listo, entregado)
+      return true;
+    });
+    const nuevosDetalles: Record<string, string[]> = {};
+
+    setDetallesFake(nuevosDetalles);
+    setOrdenesVisibles(nuevas);
+  }, [ordenes]);
+
+  const getEstadoColor = (estado: Orden['estado']) => {
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
     switch (estado) {
       case 'pendiente': return '#FF8C00';
       case 'en_preparacion': return '#2196F3';
@@ -201,6 +225,7 @@ export default function CocinaScreen() {
     }
   };
 
+<<<<<<< HEAD
   const handleLogout = () => {
     Alert.alert('Cerrar Sesión', '¿Estás seguro que deseas salir?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -235,23 +260,24 @@ export default function CocinaScreen() {
     }
   };
 
+=======
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
   return (
     <ThemedView style={styles.container}>
       {/* HEADER */}
-      <ThemedView style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.titleContainer}>
-            <IconSymbol name="flame.fill" size={32} color="#FF4500" />
-            <ThemedText type="title" style={styles.title}>Cocina</ThemedText>
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <View style={styles.iconContainer}>
+            <IconSymbol name="flame.fill" size={28} color="#FF4500" />
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <ThemedText style={styles.logoutText}>Salir</ThemedText>
-          </TouchableOpacity>
+          <View>
+            <ThemedText type="title" style={styles.title}>Cocina</ThemedText>
+            <ThemedText style={styles.subtitulo}>
+              {ordenesVisibles.length} órdenes activas
+            </ThemedText>
+          </View>
         </View>
-        <ThemedText style={styles.subtitulo}>
-          {ordenesVisibles.length} órdenes activas
-        </ThemedText>
-      </ThemedView>
+      </View>
 
       {/* LISTA DE ÓRDENES */}
       <ScrollView style={styles.lista}>
@@ -317,10 +343,17 @@ export default function CocinaScreen() {
                           const partes = producto.split(' X');
                           const nombre = partes[0].split(' $')[0].trim();
                           const cantidad = partes[1];
+<<<<<<< HEAD
                           const esProductoNuevo = productosNuevos?.includes(i);
                           const esProductoListo = productosListos?.includes(i);
                           const esProductoEntregado = productosEntregados?.includes(i);
                           
+=======
+                          const esProductoNuevo = orden.productosNuevos?.includes(i);
+                          const esProductoListo = orden.productosListos?.includes(i);
+                          const esProductoEntregado = orden.productosEntregados?.includes(i);
+
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
                           return (
                             <View key={i} style={styles.productoItemContainer}>
                               <View style={styles.productoItemInfo}>
@@ -386,41 +419,75 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   header: {
     paddingTop: 60,
-    paddingBottom: 10,
+    paddingBottom: 20,
     paddingHorizontal: 20,
-    backgroundColor: '#FFF5E1',
+    backgroundColor: '#FFF8E1', // Un tono crema más suave
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFE0B2',
   },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  titleContainer: {
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
   },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#8B4513' },
-  subtitulo: { fontSize: 14, color: '#8B4513' },
-  lista: { paddingHorizontal: 20, marginTop: 10 },
+  iconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+    shadowColor: '#FF8C00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#E65100',
+    letterSpacing: 0.5,
+  },
+  subtitulo: {
+    fontSize: 14,
+    color: '#F57C00',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  lista: { paddingHorizontal: 20, marginTop: 15 },
   ordenCard: {
     backgroundColor: '#fff',
+<<<<<<< HEAD
     padding: 16,
     marginBottom: 14,
     elevation: 3,
     borderRadius: 12,
+=======
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
   },
   ordenExpandida: {
     backgroundColor: '#FFF8F0',
-    borderColor: '#2196F3',
+    borderColor: '#FFB74D',
     borderWidth: 2,
+    elevation: 4,
   },
   ordenHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+<<<<<<< HEAD
   mesaInfo: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -434,15 +501,21 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontStyle: 'italic',
   },
+=======
+  mesaInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  mesaTexto: { fontSize: 18, fontWeight: 'bold', color: '#5D4037' },
+>>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
   estadoBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
   estadoTexto: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  productosContainer: { marginTop: 10, marginBottom: 8 },
+  productosContainer: { marginTop: 15, marginBottom: 8, paddingLeft: 4 },
   productoItemContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
     paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
   },
   productoItemInfo: {
     flexDirection: 'row',
@@ -450,9 +523,9 @@ const styles = StyleSheet.create({
     gap: 8,
     flex: 1,
   },
-  productoItem: { 
-    fontSize: 14, 
-    color: '#333', 
+  productoItem: {
+    fontSize: 15,
+    color: '#3E2723',
     fontWeight: '600',
   },
   productoStatus: {
@@ -465,49 +538,33 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: 'bold',
   },
-  nuevoTexto: { 
+  nuevoTexto: {
     color: '#D84315',
   },
   entregadoTexto: { color: '#4CAF50' },
   listoTexto: { color: '#4CAF50' },
   cantidadBadge: {
-    backgroundColor: '#9C27B0',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    backgroundColor: '#FF7043',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
-  cantidadBadgeTexto: { color: '#fff', fontWeight: 'bold' },
+  cantidadBadgeTexto: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
   detallesContainer: { marginTop: 10 },
-  detalleItem: { fontSize: 14, color: '#444', marginBottom: 5 },
+  detalleItem: { fontSize: 14, color: '#666', marginBottom: 5, fontStyle: 'italic' },
   botonListo: {
-    marginTop: 10,
+    marginTop: 15,
     backgroundColor: '#4CAF50',
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
     alignItems: 'center',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  textoListo: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  logoutButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#B22222',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#8B4513',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    marginTop: 10,
-    width: '25%',
-  },
-  logoutText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
+  textoListo: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   emptyState: { alignItems: 'center', marginTop: 80 },
   emptyTexto: { color: '#888', marginTop: 10, fontSize: 16 },
   referenciaContainer: {
