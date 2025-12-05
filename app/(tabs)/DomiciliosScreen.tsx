@@ -398,7 +398,6 @@ export default function DomiciliosScreen() {
       return;
     }
 
-    console.log('✅ Orden de domicilio creada exitosamente:', ordenData);
 
     // 4. LIMPIAR FORMULARIO ANTES DE RECARGAR
     setProductosSeleccionados([]);

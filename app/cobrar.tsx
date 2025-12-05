@@ -81,10 +81,6 @@ export default function CobrarScreen() {
   const todasLasOrdenesPendientes = ordenesPendientesMesas.length + ordenesGeneralesPendientes.length;
 
   // Debug: Log para ver qué órdenes hay
-  console.log('🏪 [Cobrar] Total órdenes mesas:', ordenes.length);
-  console.log('🏪 [Cobrar] Total órdenes generales:', ordenesGenerales.length);
-  console.log('🏪 [Cobrar] Órdenes pendientes mesas:', ordenesPendientesMesas.length);
-  console.log('🏪 [Cobrar] Órdenes pendientes generales:', ordenesGeneralesPendientes.length);
 
   // Navegar a detalles de cobro para mesas
   const handleCobrarOrden = (orden: Orden) => {

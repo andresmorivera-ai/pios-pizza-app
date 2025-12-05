@@ -54,7 +54,7 @@ export default function CrearOrdenScreen() {
   const [productoParaTamano, setProductoParaTamano] = useState<Producto | null>(null);
   const { agregarOrden, actualizarProductosOrden, getOrdenActivaPorMesa } = useOrdenes();
   const insets = useSafeAreaInsets();
-  
+
   // Detectar si es una orden de MESA o una orden GENERAL (Domicilio/Llevar)
   const esOrdenMesa = !!mesa;
   const esOrdenGeneral = !!idOrden && !!tipoOrden;
@@ -63,7 +63,7 @@ export default function CrearOrdenScreen() {
   const ordenMesaEnCurso = esOrdenMesa ? getOrdenActivaPorMesa(mesa) : null;
   const [ordenGeneralEnCurso, setOrdenGeneralEnCurso] = useState<OrdenGeneralCarga | null>(null); // Nuevo estado para orden general
   const ordenEnCurso = esOrdenMesa ? ordenMesaEnCurso : ordenGeneralEnCurso;
-  
+
   // Orden personalizado de categorías
   const ordenCategorias = ['pollo', 'adicional', 'bebidas', 'combo', 'postre'];
 
@@ -85,7 +85,7 @@ export default function CrearOrdenScreen() {
           categoria: p.categoria.trim().toLowerCase()
         }));
         setProductos(productosNormalizados);
-        
+
         // Seleccionar primera categoría según el orden personalizado
         if (productosNormalizados.length > 0) {
           const categoriasDisponibles = [...new Set(productosNormalizados.map(p => p.categoria))];
@@ -102,7 +102,7 @@ export default function CrearOrdenScreen() {
   const parsearProducto = (prodStr: string, esNuevo: boolean): ProductoSeleccionado => {
     // Formato: "Producto (tamaño) $20000 X2"
     const nombreMatch = prodStr.match(/^(.+?)\s*\((.+?)\)\s*\$(\d+)\s*X(\d+)$/);
-    
+
     if (nombreMatch) {
       return {
         nombre: nombreMatch[1].trim(),
@@ -112,18 +112,18 @@ export default function CrearOrdenScreen() {
         esNuevo: esNuevo
       };
     }
-    
+
     // Fallback o formato simplificado si el formato completo no coincide
     const partes = prodStr.split(' X');
     const cantidad = partes.length > 1 ? parseInt(partes[1]) : 1;
-    
+
     const prodPrecio = partes[0].split(' $');
     const precio = prodPrecio.length > 1 ? parseInt(prodPrecio[1]) : 0;
-    
+
     const prodTamano = prodPrecio[0].split('(');
     const nombre = prodTamano[0].trim();
     const tamano = prodTamano.length > 1 ? prodTamano[1].replace(')', '').trim() : 'Unidad';
-    
+
     return {
       nombre,
       tamano,
@@ -137,35 +137,35 @@ export default function CrearOrdenScreen() {
   useEffect(() => {
     // Lógica para Orden General existente
     if (esOrdenGeneral && idOrden) {
-        const cargarOrdenGeneral = async () => {
-            const { data, error } = await supabase
-                .from('ordenesgenerales')
-                .select('id, tipo, productos, total, referencia')
-                .eq('id', idOrden)
-                .single();
+      const cargarOrdenGeneral = async () => {
+        const { data, error } = await supabase
+          .from('ordenesgenerales')
+          .select('id, tipo, productos, total, referencia')
+          .eq('id', idOrden)
+          .single();
 
-            if (error) {
-                console.error('Error cargando orden general:', error);
-                Alert.alert('Error', 'No se pudo cargar la orden general para actualizar.');
-                return;
-            }
+        if (error) {
+          console.error('Error cargando orden general:', error);
+          Alert.alert('Error', 'No se pudo cargar la orden general para actualizar.');
+          return;
+        }
 
-            if (data) {
-                setOrdenGeneralEnCurso(data as OrdenGeneralCarga);
-                const productosExistentes: ProductoSeleccionado[] = data.productos.map(prodStr => 
-                    parsearProducto(prodStr, false)
-                );
-                setProductosSeleccionados(productosExistentes);
-            }
-        };
-        cargarOrdenGeneral();
-        return;
+        if (data) {
+          setOrdenGeneralEnCurso(data as OrdenGeneralCarga);
+          const productosExistentes: ProductoSeleccionado[] = data.productos.map((prodStr: string) =>
+            parsearProducto(prodStr, false)
+          );
+          setProductosSeleccionados(productosExistentes);
+        }
+      };
+      cargarOrdenGeneral();
+      return;
     }
 
     // Lógica para Orden de Mesa existente
     if (ordenMesaEnCurso) {
-      const productosExistentes: ProductoSeleccionado[] = ordenMesaEnCurso.productos.map(prodStr => 
-          parsearProducto(prodStr, false)
+      const productosExistentes: ProductoSeleccionado[] = ordenMesaEnCurso.productos.map(prodStr =>
+        parsearProducto(prodStr, false)
       );
       setProductosSeleccionados(productosExistentes);
     }
@@ -176,7 +176,7 @@ export default function CrearOrdenScreen() {
   const categorias = categoriasUnicas.sort((a, b) => {
     const indexA = ordenCategorias.indexOf(a);
     const indexB = ordenCategorias.indexOf(b);
-    
+
     // Si ambas están en el orden personalizado, usar ese orden
     if (indexA !== -1 && indexB !== -1) return indexA - indexB;
     // Si solo una está, la que está va primero
@@ -194,22 +194,22 @@ export default function CrearOrdenScreen() {
   // Obtener productos únicos por nombre para mostrar en el grid
   const productosUnicos = productos.reduce((acc, producto) => {
     if (producto.categoria !== categoriaSeleccionada) return acc;
-    
+
     const nombreNormalizado = normalizarNombre(producto.nombre);
     const existente = acc.find(p => normalizarNombre(p.nombre) === nombreNormalizado);
-    
+
     if (!existente) {
       acc.push(producto);
     }
-    
+
     return acc;
   }, [] as Producto[]);
 
   // Obtener todas las variantes de un producto
   const obtenerVariantes = (nombreProducto: string): Producto[] => {
     const nombreNormalizado = normalizarNombre(nombreProducto);
-    return productos.filter(p => 
-      normalizarNombre(p.nombre) === nombreNormalizado && 
+    return productos.filter(p =>
+      normalizarNombre(p.nombre) === nombreNormalizado &&
       p.categoria === categoriaSeleccionada
     );
   };
@@ -247,21 +247,21 @@ export default function CrearOrdenScreen() {
         descripcion: variante.descripcion,
         esNuevo: !!ordenEnCurso // Si hay orden en curso (Mesa o General), es un producto nuevo para esa "ronda"
       };
-      
+
       setProductosSeleccionados(prev => {
         // Si hay orden en curso (Mesa o General), siempre agregar como nuevo producto
         if (ordenEnCurso) {
           return [...prev, productoNuevo];
         }
-        
+
         // Si es orden nueva, usar la lógica de suma de cantidades
-        const productoExistente = prev.find(p => 
+        const productoExistente = prev.find(p =>
           p.nombre === productoNuevo.nombre && p.tamano === productoNuevo.tamano
         );
-        
+
         if (productoExistente) {
           // Si existe, incrementar la cantidad
-          return prev.map(p => 
+          return prev.map(p =>
             p.nombre === productoNuevo.nombre && p.tamano === productoNuevo.tamano
               ? { ...p, cantidad: p.cantidad + 1 }
               : p
@@ -271,7 +271,7 @@ export default function CrearOrdenScreen() {
           return [...prev, productoNuevo];
         }
       });
-      
+
       setModalVisible(false);
       setProductoParaTamano(null);
       setVarianteSeleccionada(null);
@@ -282,7 +282,7 @@ export default function CrearOrdenScreen() {
   const handleIncrementarCantidad = (index: number) => {
     setProductosSeleccionados(prev => {
       const producto = prev[index];
-      
+
       // Si hay orden en curso (actualización) Y el producto NO es nuevo, agregar como NUEVO producto
       if (ordenEnCurso && !producto.esNuevo) {
         const productoNuevo: ProductoSeleccionado = {
@@ -292,7 +292,7 @@ export default function CrearOrdenScreen() {
         };
         return [...prev, productoNuevo];
       }
-      
+
       // Si es orden nueva O el producto ya es nuevo, usar la lógica normal de incrementar cantidad
       return prev.map((p, i) =>
         i === index ? { ...p, cantidad: p.cantidad + 1 } : p
@@ -304,29 +304,29 @@ export default function CrearOrdenScreen() {
   const handleDecrementarCantidad = (index: number) => {
     setProductosSeleccionados(prev => {
       const producto = prev[index];
-      
+
       // Si hay orden en curso (actualización) Y el producto NO es nuevo, eliminar el último producto nuevo del mismo tipo
       if (ordenEnCurso && !producto.esNuevo) {
         // Buscar el último producto nuevo del mismo tipo (mismo nombre y tamaño)
-        const productosNuevosDelMismoTipo = prev.filter((p) => 
+        const productosNuevosDelMismoTipo = prev.filter((p) =>
           p.nombre === producto.nombre && p.tamano === producto.tamano && p.esNuevo
         );
-        
+
         if (productosNuevosDelMismoTipo.length > 0) {
           // Encontrar el índice del último producto nuevo del mismo tipo
-          const ultimoIndice = prev.findLastIndex((p) => 
+          const ultimoIndice = prev.findLastIndex((p) =>
             p.nombre === producto.nombre && p.tamano === producto.tamano && p.esNuevo
           );
-          
+
           if (ultimoIndice !== -1) {
             return prev.filter((_, i) => i !== ultimoIndice);
           }
         }
-        
+
         // Si no hay productos nuevos del mismo tipo, no hacer nada (no se puede reducir el producto original)
         return prev;
       }
-      
+
       // Si es orden nueva O el producto ya es nuevo, usar la lógica normal de decrementar cantidad
       return prev.map((p, i) =>
         i === index && p.cantidad > 1
@@ -352,12 +352,12 @@ export default function CrearOrdenScreen() {
   const handleConfirmarOrden = async () => {
     if (productosSeleccionados.length > 0) {
       const totalOrden = calcularTotal();
-      
+
       // Convertir a formato string con cantidad y precio incluidos
       const productosFormateados = productosSeleccionados.map(
         p => `${p.nombre} (${p.tamano}) $${p.precio} X${p.cantidad}`
       );
-      
+
       const listaProductos = productosSeleccionados
         .map((producto, index) => `${index + 1}. ${producto.nombre} - ${producto.tamano} X${producto.cantidad}`)
         .join('\n');
@@ -386,15 +386,32 @@ export default function CrearOrdenScreen() {
         if (ordenGeneralEnCurso) {
           // Actualizar Orden General existente
           try {
+            // Obtener orden actual para preservar índices existentes
+            const { data: ordenActual } = await supabase
+              .from('ordenesgenerales')
+              .select('productos, productos_nuevos')
+              .eq('id', idOrden)
+              .single();
+
+            const cantidadOriginal = ordenActual ? ordenActual.productos.length : 0;
+            const productosNuevosIndices: number[] = ordenActual?.productos_nuevos ? [...ordenActual.productos_nuevos] : [];
+
+            for (let i = 0; i < productosFormateados.length; i++) {
+              if (i >= cantidadOriginal) {
+                productosNuevosIndices.push(i);
+              }
+            }
+
             const { error } = await supabase
               .from('ordenesgenerales')
-              .update({ 
+              .update({
                 productos: productosFormateados,
                 total: totalOrden,
-                estado: 'pendiente' // Reiniciar estado a pendiente al actualizar
+                estado: 'pendiente', // Reiniciar estado a pendiente al actualizar
+                productos_nuevos: productosNuevosIndices
               })
               .eq('id', idOrden);
-            
+
             if (error) throw error;
 
             Alert.alert(
@@ -409,7 +426,7 @@ export default function CrearOrdenScreen() {
 
         } else {
           // Crear Orden General nueva (esta pantalla no se usa para crear, solo actualizar, pero lo dejamos como fallback si se reutiliza)
-           Alert.alert('Error de Lógica', 'Esta pantalla solo debe usarse para actualizar órdenes generales, no para crearlas.');
+          Alert.alert('Error de Lógica', 'Esta pantalla solo debe usarse para actualizar órdenes generales, no para crearlas.');
         }
       }
     } else {
@@ -417,16 +434,14 @@ export default function CrearOrdenScreen() {
     }
   };
 
-
   // Determinar el título y el icono de la cabecera
-  const tituloPantalla = esOrdenMesa ? `Mesa ${mesa}` : 
-                         esOrdenGeneral ? (tipoOrden === 'domicilios' ? 'Domicilio' : 'Para Llevar') : 
-                         'Crear Orden';
-  
-  const iconoInfo = esOrdenMesa ? 'table.furniture' :
-                    tipoOrden === 'domicilios' ? 'car.fill' :
-                    'bag.fill';
+  const tituloPantalla = esOrdenMesa ? `Mesa ${mesa}` :
+    esOrdenGeneral ? (tipoOrden === 'domicilios' ? 'Domicilio' : 'Para Llevar') :
+      'Crear Orden';
 
+  const iconoInfo = esOrdenMesa ? 'table.furniture' :
+    tipoOrden === 'domicilios' ? 'car.fill' :
+      'bag.fill';
 
   return (
     <ThemedView style={styles.container}>
@@ -457,9 +472,9 @@ export default function CrearOrdenScreen() {
               Esta orden ya tiene productos. Puedes agregar más o modificar cantidades.
             </ThemedText>
             {ordenGeneralEnCurso?.referencia && (
-                <ThemedText style={styles.avisoSubtitulo}>
-                    **Ref:** {ordenGeneralEnCurso.referencia}
-                </ThemedText>
+              <ThemedText style={styles.avisoSubtitulo}>
+                **Ref:** {ordenGeneralEnCurso.referencia}
+              </ThemedText>
             )}
           </ThemedView>
         )}
@@ -501,7 +516,7 @@ export default function CrearOrdenScreen() {
               const precioMostrar = variantes.length > 1
                 ? `Desde $${precioMin.toLocaleString('es-CO')}`
                 : `$${producto.precio.toLocaleString('es-CO')}`;
-              
+
               return (
                 <TouchableOpacity
                   key={producto.id}
@@ -537,7 +552,7 @@ export default function CrearOrdenScreen() {
                       Total: ${precioTotal.toLocaleString('es-CO')}
                     </ThemedText>
                   </ThemedView>
-                  
+
                   <ThemedView style={styles.accionesContainer}>
                     <ThemedView style={styles.cantidadContainer}>
                       <TouchableOpacity
@@ -546,9 +561,9 @@ export default function CrearOrdenScreen() {
                       >
                         <ThemedText style={styles.cantidadButtonTexto}>-</ThemedText>
                       </TouchableOpacity>
-                      
+
                       <ThemedText style={styles.cantidadTexto}>{producto.cantidad}</ThemedText>
-                      
+
                       <TouchableOpacity
                         style={styles.cantidadButton}
                         onPress={() => handleIncrementarCantidad(index)}
@@ -556,14 +571,14 @@ export default function CrearOrdenScreen() {
                         <ThemedText style={styles.cantidadButtonTexto}>+</ThemedText>
                       </TouchableOpacity>
                     </ThemedView>
-                    
+
                     <ThemedView style={styles.accionesDerecha}>
                       {producto.esNuevo && (
                         <ThemedView style={styles.nuevoBadge}>
                           <ThemedText style={styles.nuevoBadgeText}>NUEVO!</ThemedText>
                         </ThemedView>
                       )}
-                      
+
                       <TouchableOpacity
                         style={styles.eliminarButton}
                         onPress={() => handleEliminarProducto(index)}
@@ -579,8 +594,8 @@ export default function CrearOrdenScreen() {
         )}
 
         {/* Botones de acción */}
-        <ThemedView style={[styles.actionsContainer, { 
-          paddingBottom: Math.max(insets.bottom + 30, 30) 
+        <ThemedView style={[styles.actionsContainer, {
+          paddingBottom: Math.max(insets.bottom + 30, 30)
         }]}>
           <TouchableOpacity style={styles.confirmButton} onPress={handleConfirmarOrden}>
             <IconSymbol name="checkmark.circle.fill" size={24} color="#fff" />
@@ -613,19 +628,19 @@ export default function CrearOrdenScreen() {
                 {productoParaTamano.nombre}
               </ThemedText>
             )}
-            
+
             {/* Descripción de la variante seleccionada */}
             {varianteSeleccionada && (
               <ThemedText style={styles.modalDescripcion}>
                 {varianteSeleccionada.descripcion}
               </ThemedText>
             )}
-            
+
             <ThemedView style={styles.tamanosContainer}>
               {productoParaTamano && obtenerVariantes(productoParaTamano.nombre).map((variante, index) => {
                 const tamanoStr = variante.tamano.split(':')[0].trim();
                 const isSelected = varianteSeleccionada?.id === variante.id;
-                
+
                 return (
                   <TouchableOpacity
                     key={variante.id}
@@ -664,7 +679,7 @@ export default function CrearOrdenScreen() {
                   <ThemedText style={styles.modalAgregarTexto}>Agregar</ThemedText>
                 </TouchableOpacity>
               )}
-              
+
               <TouchableOpacity
                 style={styles.modalCerrarButton}
                 onPress={() => {
@@ -681,7 +696,6 @@ export default function CrearOrdenScreen() {
     </ThemedView>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -1072,8 +1086,8 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   modalCerrarTexto: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: 'bold',
     color: '#666',
   },
 });

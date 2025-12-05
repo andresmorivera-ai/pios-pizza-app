@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
   mesasGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     gap: 10,
     marginBottom: 8,
   },
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#8B4513',
   },
-  mesaSelected: { 
+  mesaSelected: {
     borderColor: '#000000',
     borderWidth: 4
   },

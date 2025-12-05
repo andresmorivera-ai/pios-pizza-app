@@ -1,4 +1,5 @@
 import { obtenerEstadisticasVentas, obtenerHistorialVentas } from '@/servicios-api/ventas';
+import { useState } from 'react';
 
 /**
  * Ejemplos de uso de las funciones de historial de ventas
@@ -20,7 +21,7 @@ export async function ejemploObtenerVentasDelDia(fecha: string) {
   try {
     const inicioDia = `${fecha}T00:00:00.000Z`;
     const finDia = `${fecha}T23:59:59.999Z`;
-    
+
     const ventas = await obtenerHistorialVentas(inicioDia, finDia);
     console.log(`Ventas del ${fecha}:`, ventas);
     return ventas;
@@ -64,7 +65,7 @@ export async function ejemploObtenerEstadisticasRango(fechaInicio: string, fecha
 
 // Ejemplo de uso en un componente React
 export function ejemploUsoEnComponente() {
-  const [ventas, setVentas] = useState([]);
+  const [ventas, setVentas] = useState<any[]>([]);
   const [cargando, setCargando] = useState(false);
 
   const cargarVentas = async () => {

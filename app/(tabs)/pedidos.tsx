@@ -19,6 +19,9 @@ interface OrdenGeneral {
     total: number;
     estado: string;
     created_at: string;
+    productos_nuevos?: number[];
+    productos_listos?: number[];
+    productos_entregados?: number[];
 }
 
 type TipoPestaña = 'mesas' | 'domicilios' | 'llevar';
@@ -38,6 +41,7 @@ export default function OrdenesUnificadasScreen() {
             const { data, error } = await supabase
                 .from('ordenesgenerales')
                 .select('*')
+                .neq('estado', 'pago')
                 // Cambio de 'creado_en' a 'created_at' para coincidir con la interfaz
                 .order('creado_en', { ascending: false }); // CAMBIO: Usar 'created_at' que es el nombre de la columna en la interfaz y por defecto en Supabase.
 
@@ -55,7 +59,6 @@ export default function OrdenesUnificadasScreen() {
 
     // Función para manejar las actualizaciones de Realtime
     const handleRealtimeUpdate = (payload: RealtimePostgresChangesPayload<OrdenGeneral>) => {
-        console.log('🔔 Cambio en tiempo real en órdenes generales:', payload);
 
         setOrdenesGenerales(prevOrdenes => {
             const { eventType, new: newRecord, old: oldRecord } = payload;
@@ -72,9 +75,13 @@ export default function OrdenesUnificadasScreen() {
                 case 'UPDATE':
                     // Se reemplaza el registro por el nuevo
                     if (newRecord) {
-                        updatedOrdenes = updatedOrdenes.map(orden =>
-                            orden.id === (newRecord as OrdenGeneral).id ? (newRecord as OrdenGeneral) : orden
-                        );
+                        if (newRecord.estado === 'pago') {
+                            updatedOrdenes = updatedOrdenes.filter(orden => orden.id !== newRecord.id);
+                        } else {
+                            updatedOrdenes = updatedOrdenes.map(orden =>
+                                orden.id === (newRecord as OrdenGeneral).id ? (newRecord as OrdenGeneral) : orden
+                            );
+                        }
                     }
                     break;
                 case 'DELETE':
@@ -385,11 +392,32 @@ export default function OrdenesUnificadasScreen() {
                         const cantidad = partes[1];
                         const productoLimpio = productoConPrecio.split(' $')[0].trim();
 
+                        const esProductoNuevo = orden.productosNuevos?.includes(index);
+
                         return (
                             <ThemedView key={index} style={styles.productoItemContainer}>
-                                <ThemedText style={styles.productoItem}>
-                                    • {productoLimpio}
-                                </ThemedText>
+                                <ThemedView style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                    <ThemedText style={styles.productoItem}>
+                                        • {productoLimpio}
+                                    </ThemedText>
+                                    {esProductoNuevo && (
+                                        <ThemedView style={{
+                                            backgroundColor: '#D32F2F', // Rojo
+                                            paddingHorizontal: 6,
+                                            paddingVertical: 2,
+                                            borderRadius: 4,
+                                            marginLeft: 8
+                                        }}>
+                                            <ThemedText style={{
+                                                fontSize: 10,
+                                                fontWeight: 'bold',
+                                                color: '#FFFFFF' // Blanco
+                                            }}>
+                                                NUEVO
+                                            </ThemedText>
+                                        </ThemedView>
+                                    )}
+                                </ThemedView>
                                 {cantidad && (
                                     <ThemedView style={styles.cantidadBadge}>
                                         <ThemedText style={styles.cantidadBadgeTexto}>
@@ -424,7 +452,7 @@ export default function OrdenesUnificadasScreen() {
                                 <IconSymbol name="plus.circle.fill" size={34} color="#4CAF50" />
                             </TouchableOpacity>
                         )}
-                        
+
                         <ThemedView style={styles.botonesContainer}>
                             {orden.estado !== 'pago' && orden.estado !== 'pendiente_por_pagar' && orden.estado !== 'disponible' && orden.estado !== 'pendiente' && orden.estado !== 'en_preparacion' && (
                                 <TouchableOpacity
@@ -445,12 +473,14 @@ export default function OrdenesUnificadasScreen() {
                                 </TouchableOpacity>
                             )}
 
-                            <TouchableOpacity
-                                style={styles.eliminarButton}
-                                onPress={() => handleEliminarOrden(orden)}
-                            >
-                                <IconSymbol name="trash" size={16} color="#fff" />
-                            </TouchableOpacity>
+                            {orden.estado === 'pendiente' && (
+                                <TouchableOpacity
+                                    style={styles.eliminarButton}
+                                    onPress={() => handleEliminarOrden(orden)}
+                                >
+                                    <IconSymbol name="trash" size={16} color="#fff" />
+                                </TouchableOpacity>
+                            )}
                         </ThemedView>
                     </ThemedView>
                 </ThemedView>
@@ -506,11 +536,32 @@ export default function OrdenesUnificadasScreen() {
                         const cantidad = partes[1];
                         const productoLimpio = productoConPrecio.split(' $')[0].trim();
 
+                        const esProductoNuevo = orden.productos_nuevos?.includes(index);
+
                         return (
                             <ThemedView key={index} style={styles.productoItemContainer}>
-                                <ThemedText style={styles.productoItem}>
-                                    • {productoLimpio}
-                                </ThemedText>
+                                <ThemedView style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                    <ThemedText style={styles.productoItem}>
+                                        • {productoLimpio}
+                                    </ThemedText>
+                                    {esProductoNuevo && (
+                                        <ThemedView style={{
+                                            backgroundColor: '#D32F2F', // Rojo
+                                            paddingHorizontal: 6,
+                                            paddingVertical: 2,
+                                            borderRadius: 4,
+                                            marginLeft: 8
+                                        }}>
+                                            <ThemedText style={{
+                                                fontSize: 10,
+                                                fontWeight: 'bold',
+                                                color: '#FFFFFF' // Blanco
+                                            }}>
+                                                NUEVO
+                                            </ThemedText>
+                                        </ThemedView>
+                                    )}
+                                </ThemedView>
                                 {cantidad && (
                                     <ThemedView style={styles.cantidadBadge}>
                                         <ThemedText style={styles.cantidadBadgeTexto}>
@@ -540,40 +591,42 @@ export default function OrdenesUnificadasScreen() {
                                 onPress={() => router.push({
                                     pathname: '/crear-orden',
                                     // CAMBIO: Pasar idOrden y tipo para la actualización
-                                    params: { idOrden: orden.id, tipo: tipoP } 
+                                    params: { idOrden: orden.id, tipo: tipoP }
                                 })}
                             >
                                 <IconSymbol name="plus.circle.fill" size={34} color="#4CAF50" />
                             </TouchableOpacity>
                         )}
-                        
+
                         <ThemedView style={styles.botonesContainer}>
-                            {orden.estado !== 'pago' && orden.estado !== 'pendiente_por_pagar' && orden.estado !== 'disponible' && orden.estado !== 'pendiente' && orden.estado !== 'en_preparacion' &&(
+                            {orden.estado !== 'pago' && orden.estado !== 'pendiente_por_pagar' && orden.estado !== 'disponible' && orden.estado !== 'pendiente' && orden.estado !== 'en_preparacion' && (
                                 <TouchableOpacity
-                                style={[
-                                    styles.accionButton,
-                                    { backgroundColor: getEstadoColor(orden.estado) }
-                                ]}
-                                onPress={() => handleCambiarEstadoGeneral(orden)}
-                            >
-                                <IconSymbol name="checkmark.circle.fill" size={16} color="#fff" />
-                                <ThemedText style={styles.accionButtonTexto}>
-                                    {
-                                        orden.estado === 'pendiente' ? 'Comenzar' :
-                                            orden.estado === 'en_preparacion' ? 'Listo' :
-                                                orden.estado === 'listo' ? 'Entregar' :
-                                                    'Pagar'
-                                    }
-                                </ThemedText>
-                            </TouchableOpacity>
+                                    style={[
+                                        styles.accionButton,
+                                        { backgroundColor: getEstadoColor(orden.estado) }
+                                    ]}
+                                    onPress={() => handleCambiarEstadoGeneral(orden)}
+                                >
+                                    <IconSymbol name="checkmark.circle.fill" size={16} color="#fff" />
+                                    <ThemedText style={styles.accionButtonTexto}>
+                                        {
+                                            orden.estado === 'pendiente' ? 'Comenzar' :
+                                                orden.estado === 'en_preparacion' ? 'Listo' :
+                                                    orden.estado === 'listo' ? 'Entregar' :
+                                                        'Pagar'
+                                        }
+                                    </ThemedText>
+                                </TouchableOpacity>
                             )}
 
-                            <TouchableOpacity
-                                style={styles.eliminarButton}
-                                onPress={() => handleEliminarOrdenGeneral(orden.id, orden.tipo)}
-                            >
-                                <IconSymbol name="trash" size={16} color="#fff" />
-                            </TouchableOpacity>
+                            {orden.estado === 'pendiente' && (
+                                <TouchableOpacity
+                                    style={styles.eliminarButton}
+                                    onPress={() => handleEliminarOrdenGeneral(orden.id, orden.tipo)}
+                                >
+                                    <IconSymbol name="trash" size={16} color="#fff" />
+                                </TouchableOpacity>
+                            )}
                         </ThemedView>
                     </ThemedView>
                 </ThemedView>

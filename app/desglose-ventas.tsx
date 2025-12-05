@@ -3,7 +3,7 @@ import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { PieChart } from '@/componentes/ui/PieChart';
 import { obtenerVentasPorMetodoPago, VentasPorMetodoPago } from '@/servicios-api/ventas';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,6 +47,7 @@ const METODOS_PAGO_INFO: Record<string, { nombre: string; icono: string; imagen?
 
 export default function DesgloseVentasScreen() {
   const insets = useSafeAreaInsets();
+  const { fechaInicio, fechaFin } = useLocalSearchParams<{ fechaInicio: string; fechaFin: string }>();
   const [ventas, setVentas] = useState<VentasPorMetodoPago[]>([]);
   const [totalGeneral, setTotalGeneral] = useState<number>(0);
   const [cargando, setCargando] = useState(true);
@@ -61,10 +62,18 @@ export default function DesgloseVentasScreen() {
       setCargando(true);
       setError(null);
 
-      // Obtener ventas del día actual
-      const hoy = new Date();
-      const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-      const finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
+      // Obtener ventas del rango seleccionado o del día actual por defecto
+      let inicioDia: Date;
+      let finDia: Date;
+
+      if (fechaInicio && fechaFin) {
+        inicioDia = new Date(fechaInicio);
+        finDia = new Date(fechaFin);
+      } else {
+        const hoy = new Date();
+        inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+        finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
+      }
 
       const resultado = await obtenerVentasPorMetodoPago(
         inicioDia.toISOString(),
@@ -192,10 +201,10 @@ export default function DesgloseVentasScreen() {
             </ThemedView>
             <ThemedText style={styles.chartTitle}>Distribución por Método de Pago</ThemedText>
             <View style={styles.chartWrapper}>
-              <PieChart 
-                data={datosGrafico} 
-                size={310} 
-                strokeWidth={25} 
+              <PieChart
+                data={datosGrafico}
+                size={310}
+                strokeWidth={25}
               />
             </View>
             <View style={styles.chartLegend}>

@@ -1,6 +1,7 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { supabase } from '@/scripts/lib/supabase';
 import { guardarVenta, ProductoVenta } from '@/servicios-api/ventas';
 import { useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
@@ -45,14 +46,11 @@ export default function DetallesCobroScreen() {
 
   // Usar el total directamente
   const totalFinal = total;
-  
+
   // Determinar si hay 3 o más productos
   const tieneMuchosProductos = productos.length >= 3;
   const productosAMostrar = productosExpandidos ? productos : productos.slice(0, 3);
-  
-  console.log('Productos totales:', productos.length);
-  console.log('Productos a mostrar:', productosAMostrar.length);
-  console.log('Expandidos:', productosExpandidos);
+
 
   // Función para procesar productos y convertirlos al formato de la base de datos
   const procesarProductosParaBD = (): ProductoVenta[] => {
@@ -61,14 +59,14 @@ export default function DetallesCobroScreen() {
       const partes = producto.split(' X');
       const productoConPrecio = partes[0]; // "Producto (tamaño) $20000"
       const cantidad = parseInt(partes[1] || '1');
-      
+
       // Extraer precio del producto
       const precioMatch = productoConPrecio.match(/\$(\d+)/);
       const precioUnitario = precioMatch ? parseInt(precioMatch[1]) : 0;
-      
+
       // Limpiar el nombre del producto (quitar precio)
       const productoLimpio = productoConPrecio.split(' $')[0].trim();
-      
+
       return {
         nombre: productoLimpio,
         cantidad: cantidad,
@@ -81,7 +79,7 @@ export default function DetallesCobroScreen() {
   // Manejar selección de método de pago
   const handleSeleccionarMetodo = (metodoId: string) => {
     setMetodoSeleccionado(metodoId);
-    
+
     // Encontrar el método actual y mostrar modal
     const metodo = metodosPago.find(m => m.id === metodoId);
     setMetodoActual(metodo);
@@ -103,7 +101,7 @@ export default function DetallesCobroScreen() {
         return;
       }
     }
-    
+
     setTransaccionConfirmada(true);
     setModalVisible(false);
   };
@@ -141,7 +139,7 @@ export default function DetallesCobroScreen() {
     // Remover comas existentes y caracteres no numéricos
     const numeroLimpio = numero.replace(/[^0-9]/g, '');
     if (numeroLimpio === '') return '';
-    
+
     // Convertir a número y formatear con comas
     const numeroFormateado = parseInt(numeroLimpio).toLocaleString();
     return numeroFormateado;
@@ -152,11 +150,11 @@ export default function DetallesCobroScreen() {
     // Formatear el número con separadores de miles
     const montoFormateado = formatearNumero(monto);
     setMontoRecibido(montoFormateado);
-    
+
     // Para cálculos, usar el número sin formato
     const montoNumerico = monto.replace(/[^0-9]/g, '');
     calcularVueltas(montoNumerico);
-    
+
     // Si el input está vacío, reiniciar contadores
     if (montoNumerico === '' || montoNumerico === '0') {
       setBilletesCount({
@@ -177,7 +175,7 @@ export default function DetallesCobroScreen() {
     const montoActual = parseFloat(montoActualSinFormato || '0');
     const nuevoMonto = montoActual + valor;
     handleMontoChange(nuevoMonto.toString());
-    
+
     // Actualizar contador de billetes
     setBilletesCount(prev => ({
       ...prev,
@@ -210,15 +208,29 @@ export default function DetallesCobroScreen() {
         productos: productosParaBD,
       });
 
-      console.log('Venta guardada con ID:', resultadoVenta.idVenta);
 
-      // Procesar el pago usando la nueva función con el ID de venta
-      console.log('🔄 Llamando a procesarPago...');
-      await procesarPago(ordenId, metodoSeleccionado as 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta', resultadoVenta.idVenta);
-      console.log('✅ procesarPago completado');
+      // Verificar si es una orden general (Domicilio o Llevar)
+      const esOrdenGeneral = mesa.toLowerCase().includes('domicilio') || mesa.toLowerCase().includes('llevar');
 
-      // Esperar un momento para que se propague el cambio
-      await new Promise(resolve => setTimeout(resolve, 500));
+      if (esOrdenGeneral) {
+        // Actualizar estado en ordenesgenerales
+        const { error } = await supabase
+          .from('ordenesgenerales')
+          .update({ estado: 'pago' })
+          .eq('id', ordenId);
+
+        if (error) {
+          console.error('Error actualizando orden general:', error);
+          throw error;
+        }
+      } else {
+        // Procesar el pago usando la función del contexto (solo para mesas)
+        // IMPORTANTE: Usar venta.id (UUID) no idVenta (string personalizado)
+        await procesarPago(ordenId, metodoSeleccionado as 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta', resultadoVenta.venta.id);
+      }
+
+      // Esperar un momento para que se propague el cambio (Removido para mayor velocidad)
+      // await new Promise(resolve => setTimeout(resolve, 500));
 
       // Mostrar confirmación
       Alert.alert(
@@ -245,14 +257,14 @@ export default function DetallesCobroScreen() {
     const partes = item.split(' X');
     const productoConPrecio = partes[0]; // "Producto (tamaño) $20000"
     const cantidad = partes[1];
-    
+
     // Extraer precio del producto
     const precioMatch = productoConPrecio.match(/\$(\d+)/);
     const precio = precioMatch ? precioMatch[1] : '0';
-    
+
     // Limpiar el nombre del producto (quitar precio)
     const productoLimpio = productoConPrecio.split(' $')[0].trim(); // "Producto (tamaño)"
-    
+
     return (
       <View key={item} style={styles.productoItemContainer}>
         <View style={styles.productoInfo}>
@@ -287,13 +299,12 @@ export default function DetallesCobroScreen() {
         styles.metodoIcon,
         (item.id === 'efectivo' || item.id === 'tarjeta') && styles.metodoIconGrande
       ]}>
-        <Image 
-          source={item.imagen} 
+        <Image
+          source={item.imagen}
           style={[
             styles.metodoImagen,
             (item.id === 'efectivo' || item.id === 'tarjeta') && styles.metodoImagenGrande
           ]}
-          onError={() => console.log('Error cargando imagen:', item.nombre)}
         />
       </View>
       <ThemedText style={styles.metodoNombre}>{item.nombre}</ThemedText>
@@ -307,8 +318,8 @@ export default function DetallesCobroScreen() {
     <ThemedView style={styles.container}>
       {/* Header fijo */}
       <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 25, 25) }]}>
-        <TouchableOpacity 
-          style={styles.backButton} 
+        <TouchableOpacity
+          style={styles.backButton}
           onPress={() => router.back()}
         >
           <IconSymbol name="arrow.left" size={20} color="#8B4513" />
@@ -324,7 +335,7 @@ export default function DetallesCobroScreen() {
       </ThemedView>
 
       {/* Contenido deslizable */}
-      <ScrollView 
+      <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -347,23 +358,22 @@ export default function DetallesCobroScreen() {
                 </View>
               ))}
             </View>
-            
+
             {/* Botón ver más/menos cuando hay muchos productos */}
             {tieneMuchosProductos && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.verMasButton}
                 onPress={() => {
-                  console.log('Botón presionado, estado actual:', productosExpandidos);
                   setProductosExpandidos(!productosExpandidos);
                 }}
               >
                 <ThemedText style={styles.verMasText}>
                   {productosExpandidos ? 'ver menos' : 'ver más...'}
                 </ThemedText>
-                <IconSymbol 
-                  name={productosExpandidos ? "chevron.up" : "chevron.down"} 
-                  size={16} 
-                  color="#8B4513" 
+                <IconSymbol
+                  name={productosExpandidos ? "chevron.up" : "chevron.down"}
+                  size={16}
+                  color="#8B4513"
                 />
               </TouchableOpacity>
             )}
@@ -391,17 +401,17 @@ export default function DetallesCobroScreen() {
         </ThemedView>
 
         {/* Botón de procesar pago */}
-        <ThemedView style={[styles.buttonContainer, { 
-          paddingBottom: Math.max(insets.bottom + 15, 15) 
+        <ThemedView style={[styles.buttonContainer, {
+          paddingBottom: Math.max(insets.bottom + 15, 15)
         }]}>
-                  <TouchableOpacity
-                    style={[
-                      styles.procesarButton,
-                      (!metodoSeleccionado || !transaccionConfirmada || procesando) && styles.procesarButtonDisabled
-                    ]}
-                    onPress={handleProcesarPago}
-                    disabled={!metodoSeleccionado || !transaccionConfirmada || procesando}
-                  >
+          <TouchableOpacity
+            style={[
+              styles.procesarButton,
+              (!metodoSeleccionado || !transaccionConfirmada || procesando) && styles.procesarButtonDisabled
+            ]}
+            onPress={handleProcesarPago}
+            disabled={!metodoSeleccionado || !transaccionConfirmada || procesando}
+          >
             <IconSymbol name="creditcard.fill" size={20} color="#fff" />
             <ThemedText style={styles.procesarButtonText}>
               {procesando ? 'Procesando...' : 'Procesar Pago'}
@@ -465,7 +475,7 @@ export default function DetallesCobroScreen() {
             {metodoActual?.id === 'efectivo' && (
               <View style={styles.modalContent}>
                 <ThemedText style={styles.modalSubtitulo}>💰 Cálculo de Vueltas</ThemedText>
-                
+
                 {/* Total de la cuenta */}
                 <View style={styles.efectivoTotalContainer}>
                   <ThemedText style={styles.efectivoLabel}>Total a pagar:</ThemedText>
@@ -537,14 +547,14 @@ export default function DetallesCobroScreen() {
 
             {/* Botones */}
             <View style={styles.modalButtons}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.modalButtonCancelar}
                 onPress={handleCancelarModal}
               >
                 <ThemedText style={styles.modalButtonTextCancelar}>Cancelar</ThemedText>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.modalButtonConfirmar}
                 onPress={handleConfirmarModal}
               >

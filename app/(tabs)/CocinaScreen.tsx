@@ -1,15 +1,13 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
-<<<<<<< HEAD
 import { supabase } from '@/scripts/lib/supabase';
 import { useAuth } from '@/utilidades/context/AuthContext';
-=======
->>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { BackHandler, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, BackHandler, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 // Interfaz para órdenes generales (de la base de datos)
 interface OrdenGeneral {
@@ -20,6 +18,9 @@ interface OrdenGeneral {
   total: number;
   estado: string;
   created_at: string;
+  productos_nuevos?: number[];
+  productos_listos?: number[];
+  productos_entregados?: number[];
 }
 
 // Interfaz unificada para la cocina
@@ -36,6 +37,7 @@ export default function CocinaScreen() {
   );
 
   const { ordenes, actualizarEstadoOrden } = useOrdenes();
+  const { logout } = useAuth();
   const [ordenExpandida, setOrdenExpandida] = useState<string | null>(null);
   const [ordenesGenerales, setOrdenesGenerales] = useState<OrdenGeneral[]>([]);
   const [ordenesVisibles, setOrdenesVisibles] = useState<OrdenUnificada[]>([]);
@@ -48,13 +50,13 @@ export default function CocinaScreen() {
         .from('ordenesgenerales')
         .select('*')
         .in('estado', ['pendiente', 'en_preparacion'])
+        .neq('estado', 'pago')
         .or('tipo.ilike.%domicilio%,tipo.ilike.%llevar%')
         .order('creado_en', { ascending: false });
 
       if (error) {
         console.error('❌ Error cargando órdenes generales:', error);
       } else if (data) {
-        console.log('✅ Órdenes cargadas:', data.length);
         const generalesFiltradas: OrdenGeneral[] = data.filter(o =>
           o.tipo.toLowerCase().includes('domicilio') || o.tipo.toLowerCase().includes('llevar')
         ).map(o => ({
@@ -72,16 +74,14 @@ export default function CocinaScreen() {
 
   // Cargar órdenes generales al montar y suscribirse a cambios en tiempo real
   useEffect(() => {
-<<<<<<< HEAD
     setCargandoGenerales(true);
     cargarOrdenesGenerales();
-    
+
     // Polling: Recargar órdenes cada 3 segundos
     const pollingInterval = setInterval(() => {
-      console.log('🔄 Recargando órdenes automáticamente...');
       cargarOrdenesGenerales();
     }, 3000);
-    
+
     // Suscripción en tiempo real a cambios en la tabla ordenesgenerales
     const subscription = supabase
       .channel('ordenes-cocina-realtime')
@@ -93,17 +93,14 @@ export default function CocinaScreen() {
           table: 'ordenesgenerales'
         },
         (payload) => {
-          console.log('🔔 Cambio en tiempo real detectado:', payload);
           // Recargar inmediatamente cuando hay un cambio
           cargarOrdenesGenerales();
         }
       )
       .subscribe((status) => {
-        console.log('📡 Estado de suscripción:', status);
       });
 
     return () => {
-      console.log('🔌 Desconectando suscripción y polling');
       clearInterval(pollingInterval);
       subscription.unsubscribe();
     };
@@ -132,28 +129,6 @@ export default function CocinaScreen() {
   }, [ordenes, ordenesGenerales]);
 
   const getEstadoColor = (estado: string) => {
-=======
-    const nuevas = ordenes.filter(o => {
-      // Excluir órdenes pagadas
-      if (o.estado === 'pago') return false;
-
-      // Si está en "pendiente_por_pagar" pero tiene productos nuevos, mostrarla
-      if (o.estado === 'pendiente_por_pagar' && o.productosNuevos && o.productosNuevos.length > 0) return true;
-
-      // Si está en "pendiente_por_pagar" sin productos nuevos, ocultarla
-      if (o.estado === 'pendiente_por_pagar') return false;
-
-      // Mostrar todas las demás (pendiente, en_preparacion, listo, entregado)
-      return true;
-    });
-    const nuevosDetalles: Record<string, string[]> = {};
-
-    setDetallesFake(nuevosDetalles);
-    setOrdenesVisibles(nuevas);
-  }, [ordenes]);
-
-  const getEstadoColor = (estado: Orden['estado']) => {
->>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
     switch (estado) {
       case 'pendiente': return '#FF8C00';
       case 'en_preparacion': return '#2196F3';
@@ -173,7 +148,7 @@ export default function CocinaScreen() {
 
   const actualizarEstadoGeneralEnDB = async (ordenId: string, nuevoEstado: string) => {
     // Actualizar el estado local inmediatamente para feedback instantáneo
-    setOrdenesGenerales(prev => 
+    setOrdenesGenerales(prev =>
       prev.map(o => o.id === ordenId ? { ...o, estado: nuevoEstado } : o)
     );
 
@@ -210,7 +185,6 @@ export default function CocinaScreen() {
   };
 
   const handleMarcarListo = async (orden: OrdenUnificada) => {
-    console.log('🍳 Marcando orden como lista:', orden.id, 'Origen:', orden.origen);
 
     if (orden.origen === 'mesa') {
       await actualizarEstadoOrden(orden.id, 'listo');
@@ -225,7 +199,6 @@ export default function CocinaScreen() {
     }
   };
 
-<<<<<<< HEAD
   const handleLogout = () => {
     Alert.alert('Cerrar Sesión', '¿Estás seguro que deseas salir?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -260,8 +233,6 @@ export default function CocinaScreen() {
     }
   };
 
-=======
->>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
   return (
     <ThemedView style={styles.container}>
       {/* HEADER */}
@@ -294,11 +265,10 @@ export default function CocinaScreen() {
           ordenesVisibles.map((orden) => {
             const expandida = ordenExpandida === orden.id;
             const info = getOrdenInfo(orden);
-            const detalles: string[] = [];
             const esMesa = orden.origen === 'mesa';
-            const productosNuevos = esMesa ? (orden as Orden).productosNuevos : undefined;
-            const productosListos = esMesa ? (orden as Orden).productosListos : undefined;
-            const productosEntregados = esMesa ? (orden as Orden).productosEntregados : undefined;
+            const productosNuevos = orden.origen === 'mesa' ? (orden as Orden).productosNuevos : (orden as OrdenGeneral).productos_nuevos;
+            const productosListos = orden.origen === 'mesa' ? (orden as Orden).productosListos : (orden as OrdenGeneral).productos_listos;
+            const productosEntregados = orden.origen === 'mesa' ? (orden as Orden).productosEntregados : (orden as OrdenGeneral).productos_entregados;
 
             return (
               <TouchableOpacity
@@ -314,9 +284,9 @@ export default function CocinaScreen() {
                     <View>
                       <ThemedText style={styles.mesaTexto}>{info.texto}</ThemedText>
                       <ThemedText style={styles.tipoOrdenTexto}>
-                        {info.tipoOrden === 'Mesa' ? 'Para Mesa' : 
-                         info.tipoOrden === 'Domicilio' ? 'Para Domicilio' : 
-                         'Para Llevar'}
+                        {info.tipoOrden === 'Mesa' ? 'Para Mesa' :
+                          info.tipoOrden === 'Domicilio' ? 'Para Domicilio' :
+                            'Para Llevar'}
                       </ThemedText>
                     </View>
                   </View>
@@ -332,53 +302,44 @@ export default function CocinaScreen() {
                       <View style={styles.referenciaContainer}>
                         <IconSymbol name="info.circle" size={16} color="#666" />
                         <ThemedText style={styles.referenciaTexto}>
-                            Referencia: {orden.referencia}
+                          Referencia: {orden.referencia}
                         </ThemedText>
                       </View>
                     )}
-                    
+
                     <View style={styles.productosContainer}>
                       {orden.productos && orden.productos.length > 0 ? (
                         orden.productos.map((producto, i) => {
                           const partes = producto.split(' X');
                           const nombre = partes[0].split(' $')[0].trim();
                           const cantidad = partes[1];
-<<<<<<< HEAD
                           const esProductoNuevo = productosNuevos?.includes(i);
                           const esProductoListo = productosListos?.includes(i);
                           const esProductoEntregado = productosEntregados?.includes(i);
-                          
-=======
-                          const esProductoNuevo = orden.productosNuevos?.includes(i);
-                          const esProductoListo = orden.productosListos?.includes(i);
-                          const esProductoEntregado = orden.productosEntregados?.includes(i);
 
->>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
                           return (
                             <View key={i} style={styles.productoItemContainer}>
-                              <View style={styles.productoItemInfo}>
+                              <View style={[styles.productoItemInfo, { flexWrap: 'wrap' }]}>
                                 <ThemedText style={styles.productoItem}>• {nombre}</ThemedText>
-                                {esMesa && esProductoNuevo && (
-                                  <View style={styles.productoStatus}>
-                                    <ThemedText style={[styles.productoStatusText, styles.nuevoTexto]}>
-                                      Nuevo!
-                                    </ThemedText>
-                                  </View>
-                                )}
-                                {esMesa && esProductoListo && !esProductoNuevo && (
-                                  <View style={styles.productoStatus}>
-                                    <ThemedText style={[styles.productoStatusText, styles.listoTexto]}>
-                                      Listo
-                                    </ThemedText>
-                                  </View>
-                                )}
-                                {esMesa && esProductoEntregado && !esProductoNuevo && !esProductoListo && (
+                                {esProductoEntregado ? (
                                   <View style={styles.productoStatus}>
                                     <ThemedText style={[styles.productoStatusText, styles.entregadoTexto]}>
                                       Entregado
                                     </ThemedText>
                                   </View>
-                                )}
+                                ) : esProductoListo ? (
+                                  <View style={styles.productoStatus}>
+                                    <ThemedText style={[styles.productoStatusText, styles.listoTexto]}>
+                                      Listo
+                                    </ThemedText>
+                                  </View>
+                                ) : esProductoNuevo ? (
+                                  <View style={styles.productoStatus}>
+                                    <ThemedText style={[styles.productoStatusText, { color: '#D32F2F' }]}>
+                                      Nuevo!
+                                    </ThemedText>
+                                  </View>
+                                ) : null}
                               </View>
                               {cantidad && (
                                 <View style={styles.cantidadBadge}>
@@ -391,12 +352,6 @@ export default function CocinaScreen() {
                       ) : (
                         <ThemedText style={styles.productoItem}>No hay productos</ThemedText>
                       )}
-                    </View>
-
-                    <View style={styles.detallesContainer}>
-                      {detalles.map((paso, i) => (
-                        <ThemedText key={i} style={styles.detalleItem}>• {paso}</ThemedText>
-                      ))}
                     </View>
 
                     {(orden.estado === 'pendiente' || orden.estado === 'en_preparacion') && (
@@ -458,12 +413,6 @@ const styles = StyleSheet.create({
   lista: { paddingHorizontal: 20, marginTop: 15 },
   ordenCard: {
     backgroundColor: '#fff',
-<<<<<<< HEAD
-    padding: 16,
-    marginBottom: 14,
-    elevation: 3,
-    borderRadius: 12,
-=======
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
@@ -474,7 +423,6 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     borderWidth: 1,
     borderColor: '#f0f0f0',
->>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
   },
   ordenExpandida: {
     backgroundColor: '#FFF8F0',
@@ -487,24 +435,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-<<<<<<< HEAD
-  mesaInfo: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  mesaInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
     flex: 1,
   },
   mesaTexto: { fontSize: 18, fontWeight: 'bold', color: '#8B4513' },
-  tipoOrdenTexto: { 
-    fontSize: 12, 
-    color: '#666', 
+  tipoOrdenTexto: {
+    fontSize: 12,
+    color: '#666',
     marginTop: 2,
     fontStyle: 'italic',
   },
-=======
-  mesaInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  mesaTexto: { fontSize: 18, fontWeight: 'bold', color: '#5D4037' },
->>>>>>> 365bfc4e8ec5d049622ca3ce44954830a34a4ff8
   estadoBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
   estadoTexto: { color: '#fff', fontSize: 12, fontWeight: '600' },
   productosContainer: { marginTop: 15, marginBottom: 8, paddingLeft: 4 },

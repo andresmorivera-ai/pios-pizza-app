@@ -76,8 +76,6 @@ export default function GastosScreen() {
 
             // Obtener fecha/hora actual del dispositivo
             const fechaActual = new Date();
-            console.log('📅 Fecha/hora del dispositivo:', fechaActual.toLocaleString('es-CO'));
-            console.log('📅 Fecha ISO que se guardará:', fechaActual.toISOString());
 
             const { data, error } = await supabase
                 .from('gastos')

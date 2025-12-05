@@ -146,9 +146,6 @@ export function CalendarioRango({
         23, 59, 59, 999
       ));
 
-      console.log('📅 Calendario - Rango en UTC:');
-      console.log('  Inicio:', inicio.toISOString());
-      console.log('  Fin:', fin.toISOString());
 
       onSelectRange(inicio, fin);
       onClose();

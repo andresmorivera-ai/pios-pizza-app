@@ -90,20 +90,13 @@ export default function ReportesScreen() {
       setCargandoVentas(true);
       setErrorVentas(null);
 
-      console.log('🔍 CARGANDO VENTAS CON RANGO:');
-      console.log('  📅 Inicio:', range.inicioDia.toISOString());
-      console.log('  📅 Fin:', range.finDia.toISOString());
-      console.log('  📅 Inicio (local):', range.inicioDia.toLocaleString('es-CO'));
-      console.log('  📅 Fin (local):', range.finDia.toLocaleString('es-CO'));
 
       const ventasCargadas = await obtenerHistorialVentas(
         range.inicioDia.toISOString(),
         range.finDia.toISOString()
       );
 
-      console.log('✅ VENTAS CARGADAS:', ventasCargadas.length);
       if (ventasCargadas.length > 0) {
-        console.log('  Primera venta:', ventasCargadas[0].fecha_hora);
       }
 
       setVentas(ventasCargadas);
@@ -119,7 +112,6 @@ export default function ReportesScreen() {
     try {
       setCargandoGastos(true);
 
-      console.log('🔍 Cargando gastos', range ? 'con filtro' : 'TODOS (sin filtro)');
 
       let query = supabase
         .from('gastos')
@@ -137,13 +129,11 @@ export default function ReportesScreen() {
 
       if (error) throw error;
 
-      console.log('📊 Gastos obtenidos:', data?.length || 0);
 
       setGastos(data || []);
       const total = (data || []).reduce((sum: number, gasto: any) => sum + (gasto.valor || 0), 0);
       setTotalGastos(total);
 
-      console.log('✅ Total de gastos:', total);
     } catch (error) {
       console.error('Error cargando gastos:', error);
       setTotalGastos(0);
@@ -439,7 +429,13 @@ export default function ReportesScreen() {
           {/* Tarjeta de Ventas - Clickeable */}
           <TouchableOpacity
             style={styles.tarjetaGanancias}
-            onPress={() => router.push('/desglose-ventas')}
+            onPress={() => router.push({
+              pathname: '/desglose-ventas',
+              params: {
+                fechaInicio: rangoSeleccionado.inicioDia.toISOString(),
+                fechaFin: rangoSeleccionado.finDia.toISOString()
+              }
+            })}
             activeOpacity={0.7}
           >
             <ThemedView style={styles.tarjetaHeader}>
@@ -949,6 +945,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 4,
+    flexWrap: 'wrap', // Permitir que el contenido baje si es necesario
   },
   cantidadBadgeReporte: {
     backgroundColor: '#9C27B0',
@@ -975,6 +972,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     marginBottom: 2,
+    flex: 1, // Permitir que el texto ocupe el espacio disponible
+    flexWrap: 'wrap', // Envolver texto largo
   },
   ordenFooter: {
     flexDirection: 'row',

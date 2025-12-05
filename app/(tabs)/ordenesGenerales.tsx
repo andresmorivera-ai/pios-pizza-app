@@ -307,7 +307,6 @@ export default function DomiciliosScreen() {
         return;
       }
 
-      console.log('✅ Orden de domicilio creada exitosamente:', ordenData);
 
       // 4. Recargar clientes recurrentes
       await cargarClientesRecurrentes();
