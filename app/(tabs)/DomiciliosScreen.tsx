@@ -306,10 +306,11 @@ export default function DomiciliosScreen() {
       Alert.alert('Error', 'Por favor ingresa el nombre del cliente');
       return false;
     }
-    if (!datosCliente.telefono.trim()) {
+    if (!datosCliente.telefono.trim() ) {
       Alert.alert('Error', 'Por favor ingresa el teléfono del cliente');
       return false;
     }
+    
     if (datosCliente.telefono.length < 10) {
       Alert.alert('Error', 'El teléfono debe tener al menos 10 dígitos');
       return false;
@@ -453,7 +454,7 @@ export default function DomiciliosScreen() {
     <ThemedView style={styles.container}>
       {/* Header */}
       <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 60, 60) }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.push("/(tabs)/seleccionar-mesa")} style={styles.backButton}>
           <IconSymbol name="chevron.left" size={24} color="#8B4513" />
         </TouchableOpacity>
         <ThemedText type="title" style={styles.title}>
@@ -506,6 +507,7 @@ export default function DomiciliosScreen() {
                 placeholderTextColor="#999"
                 keyboardType="phone-pad"
                 maxLength={10}
+                
                 value={datosCliente.telefono}
                 onChangeText={(text) => setDatosCliente(prev => ({ ...prev, telefono: text }))}
               />

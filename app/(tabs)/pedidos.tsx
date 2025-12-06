@@ -683,7 +683,7 @@ export default function OrdenesUnificadasScreen() {
                         onPress={() => setPestañaActiva('domicilios')}
                     >
                         <IconSymbol
-                            name="car.fill"
+                            name="motorcycle.fill"
                             size={18}
                             color={pestañaActiva === 'domicilios' ? '#FF8C00' : '#666'}
                         />

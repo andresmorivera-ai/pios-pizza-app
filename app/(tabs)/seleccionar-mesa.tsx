@@ -5,7 +5,7 @@ import { supabase } from '@/scripts/lib/supabase';
 import { Link, router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const formatErrorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message;
   if (typeof error === 'object') {
@@ -61,6 +61,9 @@ export default function SeleccionarMesaScreen() {
   const [mesaSeleccionada, setMesaSeleccionada] = useState<number | null>(null);
   const [errorMesas, setErrorMesas] = useState<string | null>(null);
   const animacionesRef = useRef<{ [key: number]: Animated.Value }>({});
+  const insets = useSafeAreaInsets();
+  const handlellevar = () => router.push('/(tabs)/ordenesGenerales');
+  const handleDomicilio = () => router.push('/(tabs)/DomiciliosScreen');
 
   //  Colores según estado
   const getColorMesa = (estado: Mesa['estado'] | undefined) => {
@@ -289,8 +292,31 @@ export default function SeleccionarMesaScreen() {
               <ThemedText style={styles.leyendaTexto}>Pagado</ThemedText>
             </ThemedView>
           </ThemedView>
+          
         </ThemedView>
+        <ThemedView style={[styles.mainButtonsContainer, { 
+                paddingBottom: Math.max(insets.bottom + 30, 30)
+              }]}>
+                {/* Pedidos → Visible para todos */}
+                <TouchableOpacity style={styles.mainButton} onPress={handlellevar}>
+                  <IconSymbol name="bag.fill" size={28} color="#FF8C00" />
+                  <ThemedText style={styles.mainButtonText}>Llevar</ThemedText>
+                </TouchableOpacity>
+        
+                {/* Solo Admin → Inventario */}
+                
+                  <TouchableOpacity style={styles.mainButton} onPress={handleDomicilio}>
+                    <IconSymbol name="motorcycle.fill" size={28} color="#FF8C00" />
+                    <ThemedText style={styles.mainButtonText}>Domicilio</ThemedText>
+                  </TouchableOpacity>
+                
+        
+                {/* Solo Admin → Reportes */}
+                
+                
+              </ThemedView>
       </ScrollView>
+      
     </ThemedView>
   );
 }
@@ -305,6 +331,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     gap: 16,
   },
+
   backButton: { padding: 8 },
   title: { fontSize: 24, fontWeight: 'bold', color: '#8B4513', flex: 1 },
   content: { flex: 1 },
@@ -376,4 +403,33 @@ const styles = StyleSheet.create({
     color: '#8B0000',
     fontWeight: '600',
   },
+  mainButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    minWidth: 100,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  mainButtonText: {
+    marginTop: 8,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#8B4513',
+    textAlign: 'center',
+  },
+  mainButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
 });
+
+

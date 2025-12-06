@@ -27,6 +27,9 @@ export default function RootLayout() {
               <Stack.Screen name="seleccionar-mesa" options={{ headerShown: false }} />
               <Stack.Screen name="crear-orden" options={{ headerShown: false }} />
               <Stack.Screen name="desglose-ventas" options={{ headerShown: false }} />
+              <Stack.Screen name="cobrar" options={{ headerShown: false }} />
+              <Stack.Screen name="domicilios" options={{ headerShown: false }} />
+              <Stack.Screen name="ordenes-generales" options={{ headerShown: false }} />  
             </Stack>
             <StatusBar style="auto" />
           </ThemeProvider>

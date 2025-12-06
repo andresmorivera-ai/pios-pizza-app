@@ -46,6 +46,11 @@ const MAPPING = {
   'cart.fill': 'shopping-cart',
   'person.2.fill': 'people',
   'flame.fill': 'local-fire-department',
+  'motorcycle.fill': 'motorcycle',
+  'bag.fill': 'shopping-bag',
+  
+   
+  
 } as IconMapping;
 
 /**

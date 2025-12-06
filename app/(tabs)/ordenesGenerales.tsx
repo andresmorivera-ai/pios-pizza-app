@@ -353,7 +353,7 @@ export default function DomiciliosScreen() {
     <ThemedView style={styles.container}>
       {/* Header */}
       <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 60, 60) }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.push("/(tabs)/seleccionar-mesa")} style={styles.backButton}>
           <IconSymbol name="chevron.left" size={24} color="#8B4513" />
         </TouchableOpacity>
         <ThemedText type="title" style={styles.title}>

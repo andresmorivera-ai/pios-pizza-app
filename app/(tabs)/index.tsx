@@ -5,7 +5,7 @@ import { useAuth } from '@/utilidades/context/AuthContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
 
 import { router } from 'expo-router';
-import { Alert, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
@@ -19,9 +19,9 @@ export default function HomeScreen() {
   };
 
   //  Acciones
-  const handleStartOrder = () => router.push('/iniciar-orden');
+  const handleStartOrder = () => router.push('/(tabs)/seleccionar-mesa');
   const handlePedidos = () => router.push('/pedidos');
-  const handleInventario = () => Alert.alert('Inventario', 'Navegando a la sección de inventario');
+  const handleInventario = () => router.push('/(tabs)/InventarioScreen');
   const handleReportes = () => router.push('/(tabs)/reportes');
 
   const handleCobrar = () => {
@@ -35,6 +35,7 @@ export default function HomeScreen() {
 
   //  Mostrar botón de salir si es admin, cajera o cocinera
   const mostrarSalir = esAdmin || esCajera || esCocinera;
+
 
   return (
     <ThemedView style={styles.container}>
@@ -70,7 +71,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
         
         {/* Botón Cobrar - Solo para Admin */}
-        {esAdmin && (
+        {mostrarSalir && (
           <TouchableOpacity style={styles.cobrarButton} onPress={handleCobrar}>
             <Image 
               source={require('../../assets/iconocobrar.png')} 
@@ -93,7 +94,7 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         {/* Solo Admin → Inventario */}
-        {esAdmin && (
+        {mostrarSalir && (
           <TouchableOpacity style={styles.mainButton} onPress={handleInventario}>
             <IconSymbol name="archivebox.fill" size={28} color="#FF8C00" />
             <ThemedText style={styles.mainButtonText}>Inventario</ThemedText>
@@ -108,6 +109,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
       </ThemedView>
+      
+      
+      
     </ThemedView>
   );
 }
