@@ -1,6 +1,7 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { Layout } from '@/configuracion/constants/Layout';
 import { useEffect, useState } from 'react';
 import { Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 
@@ -301,8 +302,8 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: Layout.borderRadius.xl,
+    padding: Layout.spacing.l,
     width: '90%',
     maxWidth: 400,
     elevation: 5,
@@ -315,34 +316,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: Layout.spacing.l,
   },
   botonMes: {
-    padding: 8,
+    padding: Layout.spacing.s,
   },
   mesTitulo: {
-    fontSize: 20,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
     color: '#8B4513',
   },
   diasSemanaContainer: {
     flexDirection: 'row',
-    marginBottom: 10,
+    marginBottom: Layout.spacing.s,
   },
   diaSemana: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: Layout.spacing.s,
   },
   diaSemanaTexto: {
-    fontSize: 14,
+    fontSize: Layout.fontSize.m,
     fontWeight: '600',
     color: '#8B4513',
   },
   calendario: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 20,
+    marginBottom: Layout.spacing.l,
   },
   diaVacio: {
     width: '14.28%',
@@ -353,7 +354,7 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: Layout.borderRadius.m,
     margin: 2,
   },
   diaEnRango: {
@@ -361,13 +362,13 @@ const styles = StyleSheet.create({
   },
   diaInicio: {
     backgroundColor: '#FF8C00',
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
+    borderTopLeftRadius: Layout.borderRadius.xl,
+    borderBottomLeftRadius: Layout.borderRadius.xl,
   },
   diaFin: {
     backgroundColor: '#FF8C00',
-    borderTopRightRadius: 20,
-    borderBottomRightRadius: 20,
+    borderTopRightRadius: Layout.borderRadius.xl,
+    borderBottomRightRadius: Layout.borderRadius.xl,
   },
   diaHoy: {
     borderWidth: 2,
@@ -379,7 +380,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   diaTexto: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.m,
     color: '#8B4513',
     fontWeight: '500',
   },
@@ -399,56 +400,56 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   hoyBadge: {
-    fontSize: 8,
+    fontSize: Layout.fontSize.xs,
     color: '#FF8C00',
     fontWeight: 'bold',
     marginTop: -2,
   },
   infoSeleccion: {
-    marginBottom: 20,
-    padding: 12,
+    marginBottom: Layout.spacing.l,
+    padding: Layout.spacing.m,
     backgroundColor: '#F8F9FA',
-    borderRadius: 12,
+    borderRadius: Layout.borderRadius.l,
   },
   infoItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: Layout.spacing.s,
   },
   infoLabel: {
-    fontSize: 14,
+    fontSize: Layout.fontSize.m,
     color: '#666',
     fontWeight: '600',
   },
   infoFecha: {
-    fontSize: 14,
+    fontSize: Layout.fontSize.m,
     color: '#8B4513',
     fontWeight: 'bold',
   },
   botonesContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10,
+    gap: Layout.spacing.s,
   },
   botonLimpiar: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: Layout.spacing.m,
+    paddingHorizontal: Layout.spacing.m,
     backgroundColor: '#f0f0f0',
-    borderRadius: 10,
+    borderRadius: Layout.borderRadius.m,
     alignItems: 'center',
   },
   botonLimpiarTexto: {
     color: '#666',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: Layout.fontSize.m,
   },
   botonAplicar: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: Layout.spacing.m,
+    paddingHorizontal: Layout.spacing.m,
     backgroundColor: '#FF8C00',
-    borderRadius: 10,
+    borderRadius: Layout.borderRadius.m,
     alignItems: 'center',
   },
   botonDeshabilitado: {
@@ -457,20 +458,19 @@ const styles = StyleSheet.create({
   botonAplicarTexto: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 14,
+    fontSize: Layout.fontSize.m,
   },
   botonCerrar: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: Layout.spacing.m,
+    paddingHorizontal: Layout.spacing.m,
     backgroundColor: '#DC3545',
-    borderRadius: 10,
+    borderRadius: Layout.borderRadius.m,
     alignItems: 'center',
   },
   botonCerrarTexto: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: Layout.fontSize.m,
   },
 });
-

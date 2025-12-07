@@ -1,3 +1,4 @@
+import { Layout } from '@/configuracion/constants/Layout';
 import { StyleSheet, View } from 'react-native';
 import Svg, { G, Path, Text as SvgText } from 'react-native-svg';
 
@@ -134,7 +135,7 @@ export function PieChart({ data, size = 280, strokeWidth = 25 }: PieChartProps) 
                 d={segment.pathData}
                 fill={segment.color}
                 stroke="#fff"
-                strokeWidth={3}
+                strokeWidth={Layout.moderateScale(3)}
                 opacity={0.95}
               />
               {/* Texto del porcentaje (solo si es mayor al 8% para que se vea bien) */}
@@ -142,7 +143,7 @@ export function PieChart({ data, size = 280, strokeWidth = 25 }: PieChartProps) 
                 <SvgText
                   x={segment.textX}
                   y={segment.textY + 5}
-                  fontSize="16"
+                  fontSize={Layout.fontSize.m}
                   fontWeight="bold"
                   fill="#fff"
                   textAnchor="middle"
@@ -167,4 +168,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-

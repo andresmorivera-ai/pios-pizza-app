@@ -1,9 +1,11 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
 import { useAuth } from '@/utilidades/context/AuthContext';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
+import { useFocusEffect } from '@react-navigation/native';
 import { RealtimePostgresChangesPayload } from '@supabase/supabase-js'; // Importar el tipo de payload
 import { router } from 'expo-router'; // Importar router de expo-router
 import { useCallback, useEffect, useState } from 'react';
@@ -98,6 +100,13 @@ export default function OrdenesUnificadasScreen() {
             return updatedOrdenes;
         });
     };
+
+    // Recargar datos cuando la pantalla recibe foco
+    useFocusEffect(
+        useCallback(() => {
+            cargarOrdenesGenerales();
+        }, [cargarOrdenesGenerales])
+    );
 
     // Cargar órdenes generales al montar y suscribirse a cambios en tiempo real
     useEffect(() => {
@@ -775,46 +784,46 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
     },
     header: {
-        paddingHorizontal: 20,
-        paddingBottom: 20,
+        paddingHorizontal: Layout.spacing.l,
+        paddingBottom: Layout.spacing.l,
         backgroundColor: '#fff',
     },
     headerTop: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: Layout.spacing.m,
     },
     title: {
-        fontSize: 28,
+        fontSize: Layout.fontSize.xxl,
         fontWeight: 'bold',
         color: '#8B4513',
     },
     contadorContainer: {
         backgroundColor: '#FF8C00',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 15,
+        paddingHorizontal: Layout.spacing.m,
+        paddingVertical: Layout.spacing.s,
+        borderRadius: Layout.borderRadius.xl,
     },
     contadorTexto: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: Layout.fontSize.m,
         fontWeight: '600',
     },
     tabsContainer: {
         flexDirection: 'row',
-        gap: 8,
+        gap: Layout.spacing.s,
     },
     tab: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 12,
-        borderRadius: 12,
+        paddingVertical: Layout.verticalScale(12),
+        paddingHorizontal: Layout.spacing.m,
+        borderRadius: Layout.borderRadius.l,
         backgroundColor: '#f0f0f0',
-        gap: 6,
+        gap: Layout.spacing.s,
     },
     tabActiva: {
         backgroundColor: '#FFE4CC',
@@ -822,7 +831,7 @@ const styles = StyleSheet.create({
         borderColor: '#FF8C00',
     },
     tabTexto: {
-        fontSize: 13,
+        fontSize: Layout.fontSize.s,
         fontWeight: '500',
         color: '#666',
     },
@@ -832,14 +841,14 @@ const styles = StyleSheet.create({
     },
     listaOrdenes: {
         flex: 1,
-        paddingHorizontal: 20,
-        paddingTop: 20,
+        paddingHorizontal: Layout.spacing.l,
+        paddingTop: Layout.spacing.l,
     },
     ordenCard: {
         backgroundColor: '#fff',
-        borderRadius: 15,
-        padding: 16,
-        marginBottom: 16,
+        borderRadius: Layout.borderRadius.xl,
+        padding: Layout.spacing.m,
+        marginBottom: Layout.spacing.m,
         elevation: 4,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -850,40 +859,40 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: Layout.spacing.m,
     },
     mesaInfo: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: Layout.spacing.s,
         flex: 1,
     },
     mesaTexto: {
-        fontSize: 16,
+        fontSize: Layout.fontSize.l,
         fontWeight: 'bold',
         color: '#8B4513',
     },
     estadoBadge: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
+        paddingHorizontal: Layout.spacing.m,
+        paddingVertical: Layout.spacing.s,
+        borderRadius: Layout.borderRadius.l,
     },
     estadoTexto: {
         color: '#fff',
-        fontSize: 12,
+        fontSize: Layout.fontSize.s,
         fontWeight: '600',
     },
     referenciaContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        gap: Layout.spacing.s,
         backgroundColor: '#f0f0f0',
-        padding: 8,
-        borderRadius: 8,
-        marginBottom: 12,
+        padding: Layout.spacing.s,
+        borderRadius: Layout.borderRadius.m,
+        marginBottom: Layout.spacing.m,
     },
     referenciaTexto: {
-        fontSize: 12,
+        fontSize: Layout.fontSize.s,
         color: '#666',
         flex: 1,
     },
@@ -892,49 +901,49 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         backgroundColor: '#f0f0f0',
-        padding: 10,
-        borderRadius: 8,
-        marginBottom: 12,
+        padding: Layout.spacing.s,
+        borderRadius: Layout.borderRadius.m,
+        marginBottom: Layout.spacing.m,
     },
     totalLabel: {
-        fontSize: 14,
+        fontSize: Layout.fontSize.m,
         fontWeight: '600',
         color: '#8B4513',
     },
     totalValor: {
-        fontSize: 18,
+        fontSize: Layout.fontSize.xl,
         fontWeight: 'bold',
         color: '#28A745',
     },
     productosContainer: {
-        marginBottom: 12,
+        marginBottom: Layout.spacing.m,
     },
     productosTitulo: {
-        fontSize: 14,
+        fontSize: Layout.fontSize.m,
         fontWeight: '600',
         color: '#8B4513',
-        marginBottom: 6,
+        marginBottom: Layout.spacing.s,
     },
     productoItemContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 4,
+        marginBottom: Layout.spacing.xs,
     },
     productoItem: {
-        fontSize: 14,
+        fontSize: Layout.fontSize.m,
         color: '#666',
         flex: 1,
     },
     cantidadBadge: {
         backgroundColor: '#9C27B0',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-        marginLeft: 8,
+        paddingHorizontal: Layout.spacing.s,
+        paddingVertical: Layout.spacing.xs,
+        borderRadius: Layout.borderRadius.l,
+        marginLeft: Layout.spacing.s,
     },
     cantidadBadgeTexto: {
-        fontSize: 13,
+        fontSize: Layout.fontSize.s,
         fontWeight: 'bold',
         color: '#fff',
     },
@@ -944,50 +953,49 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     fechaTexto: {
-        fontSize: 12,
+        fontSize: Layout.fontSize.s,
         color: '#999',
     },
     botonesContainer: {
         flexDirection: 'row',
-        gap: 8,
+        gap: Layout.spacing.s,
     },
     accionButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        gap: 4,
+        paddingHorizontal: Layout.spacing.m,
+        paddingVertical: Layout.spacing.s,
+        borderRadius: Layout.borderRadius.m,
+        gap: Layout.spacing.xs,
     },
     accionButtonTexto: {
         color: '#fff',
-        fontSize: 12,
+        fontSize: Layout.fontSize.s,
         fontWeight: '600',
     },
     eliminarButton: {
         backgroundColor: '#F44336',
-        padding: 8,
-        borderRadius: 8,
+        padding: Layout.spacing.s,
+        borderRadius: Layout.borderRadius.m,
     },
-    // Nuevo estilo para el botón de agregar más productos
     agregarMasButton: {
-        padding: 4,
+        padding: Layout.spacing.xs,
     },
     emptyState: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingTop: 60,
+        paddingTop: Layout.verticalScale(60),
     },
     emptyStateTexto: {
-        fontSize: 18,
+        fontSize: Layout.fontSize.xl,
         fontWeight: '600',
         color: '#8B4513',
-        marginTop: 16,
+        marginTop: Layout.spacing.m,
     },
     emptyStateSubtexto: {
-        fontSize: 14,
+        fontSize: Layout.fontSize.m,
         color: '#666',
-        marginTop: 8,
+        marginTop: Layout.spacing.s,
         textAlign: 'center',
     },
 });

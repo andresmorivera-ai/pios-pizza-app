@@ -1,4 +1,5 @@
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { Layout } from '@/configuracion/constants/Layout';
 import { Colors } from '@/configuracion/constants/theme';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
 import { useRouter } from 'expo-router';
@@ -61,28 +62,28 @@ export default function InventarioScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        padding: 20,
+        padding: Layout.spacing.l,
     },
     header: {
-        marginBottom: 30,
-        marginTop: 10,
+        marginBottom: Layout.spacing.xl,
+        marginTop: Layout.spacing.s,
     },
     title: {
-        fontSize: 28,
+        fontSize: Layout.fontSize.xxl,
         fontWeight: 'bold',
-        marginBottom: 5,
+        marginBottom: Layout.spacing.xs,
     },
     subtitle: {
-        fontSize: 16,
+        fontSize: Layout.fontSize.m,
     },
     menuContainer: {
-        gap: 20,
+        gap: Layout.spacing.l,
     },
     card: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 20,
-        borderRadius: 16,
+        padding: Layout.spacing.l,
+        borderRadius: Layout.borderRadius.xl,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
@@ -90,22 +91,22 @@ const styles = StyleSheet.create({
         elevation: 3,
     },
     iconContainer: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
+        width: Layout.icon.xxxl,
+        height: Layout.icon.xxxl,
+        borderRadius: Layout.borderRadius.xl,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 15,
+        marginRight: Layout.spacing.m,
     },
     cardContent: {
         flex: 1,
     },
     cardTitle: {
-        fontSize: 18,
+        fontSize: Layout.fontSize.xl,
         fontWeight: 'bold',
         marginBottom: 4,
     },
     cardDescription: {
-        fontSize: 14,
+        fontSize: Layout.fontSize.m,
     },
 });

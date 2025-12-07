@@ -1,6 +1,7 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
 import { useAuth } from '@/utilidades/context/AuthContext';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
@@ -71,6 +72,13 @@ export default function CocinaScreen() {
       setCargandoGenerales(false);
     }
   };
+
+  // Recargar datos cuando la pantalla recibe foco (además del bloqueo del botón atrás)
+  useFocusEffect(
+    React.useCallback(() => {
+      cargarOrdenesGenerales();
+    }, [])
+  );
 
   // Cargar órdenes generales al montar y suscribirse a cambios en tiempo real
   useEffect(() => {
@@ -251,120 +259,123 @@ export default function CocinaScreen() {
       </View>
 
       {/* LISTA DE ÓRDENES */}
-      <ScrollView style={styles.lista}>
-        {ordenesVisibles.length === 0 && !cargandoGenerales ? (
-          <View style={styles.emptyState}>
-            <IconSymbol name="list.clipboard" size={64} color="#ccc" />
-            <ThemedText style={styles.emptyTexto}>No hay órdenes pendientes</ThemedText>
-          </View>
-        ) : cargandoGenerales ? (
-          <View style={styles.emptyState}>
-            <ThemedText style={styles.emptyTexto}>Cargando órdenes...</ThemedText>
-          </View>
-        ) : (
-          ordenesVisibles.map((orden) => {
-            const expandida = ordenExpandida === orden.id;
-            const info = getOrdenInfo(orden);
-            const esMesa = orden.origen === 'mesa';
-            const productosNuevos = orden.origen === 'mesa' ? (orden as Orden).productosNuevos : (orden as OrdenGeneral).productos_nuevos;
-            const productosListos = orden.origen === 'mesa' ? (orden as Orden).productosListos : (orden as OrdenGeneral).productos_listos;
-            const productosEntregados = orden.origen === 'mesa' ? (orden as Orden).productosEntregados : (orden as OrdenGeneral).productos_entregados;
+      <ScrollView style={styles.lista} contentContainerStyle={styles.listaContent}>
+        <View style={styles.gridContainer}>
+          {ordenesVisibles.length === 0 && !cargandoGenerales ? (
+            <View style={styles.emptyState}>
+              <IconSymbol name="list.clipboard" size={64} color="#ccc" />
+              <ThemedText style={styles.emptyTexto}>No hay órdenes pendientes</ThemedText>
+            </View>
+          ) : cargandoGenerales ? (
+            <View style={styles.emptyState}>
+              <ThemedText style={styles.emptyTexto}>Cargando órdenes...</ThemedText>
+            </View>
+          ) : (
+            ordenesVisibles.map((orden) => {
+              const expandida = ordenExpandida === orden.id;
+              const info = getOrdenInfo(orden);
+              const esMesa = orden.origen === 'mesa';
+              const productosNuevos = orden.origen === 'mesa' ? (orden as Orden).productosNuevos : (orden as OrdenGeneral).productos_nuevos;
+              const productosListos = orden.origen === 'mesa' ? (orden as Orden).productosListos : (orden as OrdenGeneral).productos_listos;
+              const productosEntregados = orden.origen === 'mesa' ? (orden as Orden).productosEntregados : (orden as OrdenGeneral).productos_entregados;
 
-            return (
-              <TouchableOpacity
-                key={orden.id}
-                activeOpacity={0.9}
-                onPress={() => handleExpandirOrden(orden)}
-                style={[styles.ordenCard, expandida && styles.ordenExpandida]}
-              >
-                {/* Encabezado */}
-                <View style={styles.ordenHeader}>
-                  <View style={styles.mesaInfo}>
-                    <IconSymbol name={info.simbolo as any} size={20} color={info.color} />
-                    <View>
-                      <ThemedText style={styles.mesaTexto}>{info.texto}</ThemedText>
-                      <ThemedText style={styles.tipoOrdenTexto}>
-                        {info.tipoOrden === 'Mesa' ? 'Para Mesa' :
-                          info.tipoOrden === 'Domicilio' ? 'Para Domicilio' :
-                            'Para Llevar'}
-                      </ThemedText>
-                    </View>
-                  </View>
-                  <View style={[styles.estadoBadge, { backgroundColor: getEstadoColor(orden.estado) }]}>
-                    <ThemedText style={styles.estadoTexto}>{getEstadoTexto(orden.estado)}</ThemedText>
-                  </View>
-                </View>
-
-                {/* Si está expandida, muestra los productos y botón */}
-                {expandida && (
-                  <>
-                    {orden.origen === 'general' && 'referencia' in orden && orden.referencia && (
-                      <View style={styles.referenciaContainer}>
-                        <IconSymbol name="info.circle" size={16} color="#666" />
-                        <ThemedText style={styles.referenciaTexto}>
-                          Referencia: {orden.referencia}
+              return (
+                <TouchableOpacity
+                  key={orden.id}
+                  activeOpacity={0.9}
+                  onPress={() => handleExpandirOrden(orden)}
+                  style={[styles.ordenCard, expandida && styles.ordenExpandida]}
+                >
+                  {/* Encabezado */}
+                  <View style={styles.ordenHeader}>
+                    <View style={styles.mesaInfo}>
+                      <IconSymbol name={info.simbolo as any} size={20} color={info.color} />
+                      <View>
+                        <ThemedText style={styles.mesaTexto}>{info.texto}</ThemedText>
+                        <ThemedText style={styles.tipoOrdenTexto}>
+                          {info.tipoOrden === 'Mesa' ? 'Para Mesa' :
+                            info.tipoOrden === 'Domicilio' ? 'Para Domicilio' :
+                              'Para Llevar'}
                         </ThemedText>
                       </View>
-                    )}
-
-                    <View style={styles.productosContainer}>
-                      {orden.productos && orden.productos.length > 0 ? (
-                        orden.productos.map((producto, i) => {
-                          const partes = producto.split(' X');
-                          const nombre = partes[0].split(' $')[0].trim();
-                          const cantidad = partes[1];
-                          const esProductoNuevo = productosNuevos?.includes(i);
-                          const esProductoListo = productosListos?.includes(i);
-                          const esProductoEntregado = productosEntregados?.includes(i);
-
-                          return (
-                            <View key={i} style={styles.productoItemContainer}>
-                              <View style={[styles.productoItemInfo, { flexWrap: 'wrap' }]}>
-                                <ThemedText style={styles.productoItem}>• {nombre}</ThemedText>
-                                {esProductoEntregado ? (
-                                  <View style={styles.productoStatus}>
-                                    <ThemedText style={[styles.productoStatusText, styles.entregadoTexto]}>
-                                      Entregado
-                                    </ThemedText>
-                                  </View>
-                                ) : esProductoListo ? (
-                                  <View style={styles.productoStatus}>
-                                    <ThemedText style={[styles.productoStatusText, styles.listoTexto]}>
-                                      Listo
-                                    </ThemedText>
-                                  </View>
-                                ) : esProductoNuevo ? (
-                                  <View style={styles.productoStatus}>
-                                    <ThemedText style={[styles.productoStatusText, { color: '#D32F2F' }]}>
-                                      Nuevo!
-                                    </ThemedText>
-                                  </View>
-                                ) : null}
-                              </View>
-                              {cantidad && (
-                                <View style={styles.cantidadBadge}>
-                                  <ThemedText style={styles.cantidadBadgeTexto}>X{cantidad}</ThemedText>
-                                </View>
-                              )}
-                            </View>
-                          );
-                        })
-                      ) : (
-                        <ThemedText style={styles.productoItem}>No hay productos</ThemedText>
-                      )}
                     </View>
+                    <View style={[styles.estadoBadge, { backgroundColor: getEstadoColor(orden.estado) }]}>
+                      <ThemedText style={styles.estadoTexto}>{getEstadoTexto(orden.estado)}</ThemedText>
+                    </View>
+                  </View>
 
-                    {(orden.estado === 'pendiente' || orden.estado === 'en_preparacion') && (
-                      <TouchableOpacity style={styles.botonListo} onPress={() => handleMarcarListo(orden)}>
-                        <ThemedText style={styles.textoListo}>Marcar como Listo</ThemedText>
-                      </TouchableOpacity>
-                    )}
-                  </>
-                )}
-              </TouchableOpacity>
-            );
-          })
-        )}
+                  {/* Si está expandida, muestra los productos y botón */}
+                  {expandida && (
+                    <>
+                      {orden.origen === 'general' && 'referencia' in orden && orden.referencia && (
+                        <View style={styles.referenciaContainer}>
+                          <IconSymbol name="info.circle" size={16} color="#666" />
+                          <ThemedText style={styles.referenciaTexto}>
+                            Referencia: {orden.referencia}
+                          </ThemedText>
+                        </View>
+                      )}
+
+                      <View style={styles.productosContainer}>
+                        {orden.productos && orden.productos.length > 0 ? (
+                          orden.productos.map((producto, i) => {
+                            const partes = producto.split(' X');
+                            const nombre = partes[0].split(' $')[0].trim();
+                            const cantidad = partes[1];
+                            const esProductoNuevo = productosNuevos?.includes(i);
+                            const esProductoListo = productosListos?.includes(i);
+                            const esProductoEntregado = productosEntregados?.includes(i);
+
+                            return (
+                              <View key={i} style={styles.productoItemContainer}>
+                                <View style={[styles.productoItemInfo, { flexWrap: 'wrap' }]}>
+                                  <ThemedText style={styles.productoItem}>• {nombre}</ThemedText>
+                                  {esProductoEntregado ? (
+                                    <View style={styles.productoStatus}>
+                                      <ThemedText style={[styles.productoStatusText, styles.entregadoTexto]}>
+                                        Entregado
+                                      </ThemedText>
+                                    </View>
+                                  ) : esProductoListo ? (
+                                    <View style={styles.productoStatus}>
+                                      <ThemedText style={[styles.productoStatusText, styles.listoTexto]}>
+                                        Listo
+                                      </ThemedText>
+                                    </View>
+                                  ) : esProductoNuevo ? (
+                                    <View style={styles.productoStatus}>
+                                      <ThemedText style={[styles.productoStatusText, { color: '#D32F2F' }]}>
+                                        Nuevo!
+                                      </ThemedText>
+                                    </View>
+                                  ) : null}
+                                </View>
+                                {cantidad && (
+                                  <View style={styles.cantidadBadge}>
+                                    <ThemedText style={styles.cantidadBadgeTexto}>X{cantidad}</ThemedText>
+                                  </View>
+                                )}
+                              </View>
+                            );
+                          })
+                        ) : (
+                          <ThemedText style={styles.productoItem}>No hay productos</ThemedText>
+                        )}
+                      </View>
+
+                      {(orden.estado === 'pendiente' || orden.estado === 'en_preparacion') && (
+                        <TouchableOpacity style={styles.botonListo} onPress={() => handleMarcarListo(orden)}>
+                          <ThemedText style={styles.textoListo}>Marcar como Listo</ThemedText>
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  )}
+                </TouchableOpacity>
+              );
+            })
+          )}
+
+        </View>
       </ScrollView>
     </ThemedView>
   );
@@ -373,10 +384,10 @@ export default function CocinaScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   header: {
-    paddingTop: 60,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    backgroundColor: '#FFF8E1', // Un tono crema más suave
+    paddingTop: Layout.verticalScale(60),
+    paddingBottom: Layout.spacing.l,
+    paddingHorizontal: Layout.spacing.l,
+    backgroundColor: '#FFF8E1',
     borderBottomWidth: 1,
     borderBottomColor: '#FFE0B2',
   },
@@ -385,13 +396,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: Layout.icon.xxl,
+    height: Layout.icon.xxl,
+    borderRadius: Layout.borderRadius.xl,
     backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 15,
+    marginRight: Layout.spacing.m,
     shadowColor: '#FF8C00',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -399,23 +410,34 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   title: {
-    fontSize: 28,
+    fontSize: Layout.fontSize.xxl,
     fontWeight: '800',
     color: '#E65100',
     letterSpacing: 0.5,
   },
   subtitulo: {
-    fontSize: 14,
+    fontSize: Layout.fontSize.m,
     color: '#F57C00',
     fontWeight: '500',
     marginTop: 2,
   },
-  lista: { paddingHorizontal: 20, marginTop: 15 },
+  lista: {
+    marginTop: Layout.spacing.m,
+  },
+  listaContent: {
+    paddingHorizontal: Layout.spacing.l,
+    paddingBottom: Layout.spacing.xl,
+  },
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Layout.spacing.m,
+  },
   ordenCard: {
+    width: Layout.isTablet ? '31%' : '100%',
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
+    borderRadius: Layout.borderRadius.xl,
+    padding: Layout.spacing.m,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -438,24 +460,24 @@ const styles = StyleSheet.create({
   mesaInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Layout.spacing.s,
     flex: 1,
   },
-  mesaTexto: { fontSize: 18, fontWeight: 'bold', color: '#8B4513' },
+  mesaTexto: { fontSize: Layout.fontSize.xl, fontWeight: 'bold', color: '#8B4513' },
   tipoOrdenTexto: {
-    fontSize: 12,
+    fontSize: Layout.fontSize.s,
     color: '#666',
     marginTop: 2,
     fontStyle: 'italic',
   },
-  estadoBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12 },
-  estadoTexto: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  productosContainer: { marginTop: 15, marginBottom: 8, paddingLeft: 4 },
+  estadoBadge: { paddingHorizontal: Layout.spacing.m, paddingVertical: Layout.spacing.xs, borderRadius: Layout.borderRadius.l },
+  estadoTexto: { color: '#fff', fontSize: Layout.fontSize.s, fontWeight: '600' },
+  productosContainer: { marginTop: Layout.spacing.m, marginBottom: Layout.spacing.s, paddingLeft: 4 },
   productoItemContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: Layout.spacing.s,
     paddingVertical: 4,
     borderBottomWidth: 1,
     borderBottomColor: '#f5f5f5',
@@ -463,11 +485,11 @@ const styles = StyleSheet.create({
   productoItemInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Layout.spacing.s,
     flex: 1,
   },
   productoItem: {
-    fontSize: 15,
+    fontSize: Layout.fontSize.m,
     color: '#3E2723',
     fontWeight: '600',
   },
@@ -475,10 +497,10 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 3,
-    marginLeft: 8,
+    marginLeft: Layout.spacing.s,
   },
   productoStatusText: {
-    fontSize: 11,
+    fontSize: Layout.fontSize.xs,
     fontWeight: 'bold',
   },
   nuevoTexto: {
@@ -488,18 +510,18 @@ const styles = StyleSheet.create({
   listoTexto: { color: '#4CAF50' },
   cantidadBadge: {
     backgroundColor: '#FF7043',
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    borderRadius: Layout.borderRadius.m,
+    paddingHorizontal: Layout.spacing.s,
     paddingVertical: 4,
   },
-  cantidadBadgeTexto: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  cantidadBadgeTexto: { color: '#fff', fontWeight: 'bold', fontSize: Layout.fontSize.s },
   detallesContainer: { marginTop: 10 },
-  detalleItem: { fontSize: 14, color: '#666', marginBottom: 5, fontStyle: 'italic' },
+  detalleItem: { fontSize: Layout.fontSize.m, color: '#666', marginBottom: 5, fontStyle: 'italic' },
   botonListo: {
-    marginTop: 15,
+    marginTop: Layout.spacing.m,
     backgroundColor: '#4CAF50',
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: Layout.spacing.m,
+    borderRadius: Layout.borderRadius.l,
     alignItems: 'center',
     shadowColor: '#4CAF50',
     shadowOffset: { width: 0, height: 2 },
@@ -507,20 +529,20 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 3,
   },
-  textoListo: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  emptyState: { alignItems: 'center', marginTop: 80 },
-  emptyTexto: { color: '#888', marginTop: 10, fontSize: 16 },
+  textoListo: { color: '#fff', fontWeight: 'bold', fontSize: Layout.fontSize.l },
+  emptyState: { alignItems: 'center', marginTop: Layout.verticalScale(80), width: '100%' },
+  emptyTexto: { color: '#888', marginTop: 10, fontSize: Layout.fontSize.l },
   referenciaContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Layout.spacing.s,
     backgroundColor: '#f0f0f0',
-    padding: 8,
-    borderRadius: 8,
-    marginBottom: 8,
+    padding: Layout.spacing.s,
+    borderRadius: Layout.borderRadius.m,
+    marginBottom: Layout.spacing.s,
   },
   referenciaTexto: {
-    fontSize: 12,
+    fontSize: Layout.fontSize.s,
     color: '#666',
     flex: 1,
   },
