@@ -1,6 +1,7 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
 import { useAuth } from '@/utilidades/context/AuthContext';
 import { router } from 'expo-router';
@@ -79,13 +80,13 @@ export default function LoginScreen() {
         correo: data.correo,
         rol_id: data.rol_id,
       });
-      
+
       if (data.rol_id === 3) {
-      
-      router.push('/(tabs)/CocinaScreen');
-    } else {
-      router.push('/(tabs)');
-    }
+
+        router.push('/(tabs)/CocinaScreen');
+      } else {
+        router.push('/(tabs)');
+      }
 
     } catch (e) {
       Alert.alert('Error', 'No se pudo conectar al servidor.');
@@ -197,54 +198,54 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF8DC',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: Layout.spacing.xl,
   },
-  header: { alignItems: 'center', marginBottom: 40 },
-  title: { color: '#8B4513', fontSize: 30, fontWeight: 'bold', marginTop: 10 },
+  header: { alignItems: 'center', marginBottom: Layout.spacing.xxl },
+  title: { color: '#8B4513', fontSize: Layout.fontSize.xxl, fontWeight: 'bold', marginTop: Layout.spacing.s },
   formContainer: {
     width: '100%',
     backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 30,
+    borderRadius: Layout.borderRadius.xl,
+    padding: Layout.spacing.xl,
     elevation: 5,
     shadowColor: '#000',
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },
-  label: { fontSize: 16, color: '#8B4513', marginBottom: 6, fontWeight: '600' },
+  label: { fontSize: Layout.fontSize.m, color: '#8B4513', marginBottom: Layout.spacing.xs, fontWeight: '600' },
 
   /* Este style es exactamente igual al TextInput original */
   input: {
     borderWidth: 1,
     borderColor: '#FFD700',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 16,
+    borderRadius: Layout.borderRadius.l,
+    padding: Layout.spacing.m,
+    fontSize: Layout.fontSize.m,
     color: '#8B4513',
-    marginBottom: 20,
+    marginBottom: Layout.spacing.l,
     backgroundColor: '#FFF8E1',
     justifyContent: 'center',
   },
 
   inputText: {
     color: '#8B4513',
-    fontSize: 16,
+    fontSize: Layout.fontSize.m,
   },
   placeholderText: {
     color: '#B5651D',
-    fontSize: 16,
+    fontSize: Layout.fontSize.m,
   },
 
   loginButton: {
     flexDirection: 'row',
     backgroundColor: '#FF8C00',
-    borderRadius: 15,
+    borderRadius: Layout.borderRadius.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 14,
-    gap: 10,
+    padding: Layout.spacing.m,
+    gap: Layout.spacing.s,
   },
-  loginButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  loginButtonText: { color: '#fff', fontSize: Layout.fontSize.l, fontWeight: 'bold' },
 });
 
 /* estilos del modal (separados para que no interfieran con tu layout) */
@@ -257,36 +258,36 @@ const modalStyles = StyleSheet.create({
   modalContainer: {
     maxHeight: '60%',
     backgroundColor: '#fff',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    paddingHorizontal: 8,
-    paddingTop: 12,
-    paddingBottom: 24,
+    borderTopLeftRadius: Layout.borderRadius.l,
+    borderTopRightRadius: Layout.borderRadius.l,
+    paddingHorizontal: Layout.spacing.s,
+    paddingTop: Layout.spacing.m,
+    paddingBottom: Layout.spacing.xl,
     elevation: 8,
   },
   item: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: Layout.spacing.m,
+    paddingHorizontal: Layout.spacing.m,
   },
   itemText: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.m,
     color: '#8B4513',
     fontWeight: '600',
   },
   itemSubText: {
-    fontSize: 12,
+    fontSize: Layout.fontSize.s,
     color: '#8B4513',
     opacity: 0.7,
     marginTop: 4,
   },
   separator: { height: 1, backgroundColor: '#EEE' },
-  empty: { padding: 16, alignItems: 'center' },
+  empty: { padding: Layout.spacing.m, alignItems: 'center' },
   closeButton: {
-    marginTop: 10,
+    marginTop: Layout.spacing.s,
     alignSelf: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingHorizontal: Layout.spacing.xl,
+    paddingVertical: Layout.spacing.s,
+    borderRadius: Layout.borderRadius.l,
     backgroundColor: '#FF8C00',
   },
   closeText: { color: '#fff', fontWeight: '700' },

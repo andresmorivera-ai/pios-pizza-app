@@ -1,5 +1,6 @@
 import { HapticTab } from '@/componentes/haptic-tab';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { Layout } from '@/configuracion/constants/Layout';
 import { Colors } from '@/configuracion/constants/theme';
 import { useAuth } from '@/utilidades/context/AuthContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
@@ -61,9 +62,9 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          height: 65 + Math.max(insets.bottom, 8),
+          height: Layout.verticalScale(65) + Math.max(insets.bottom, 8),
           paddingBottom: Math.max(insets.bottom, 8),
-          paddingTop: 8,
+          paddingTop: Layout.spacing.s,
           backgroundColor: '#fff',
           borderTopWidth: 1,
           borderTopColor: '#E0E0E0',
@@ -75,7 +76,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           href: vis.home ? undefined : null,
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={Layout.icon.m} name="house.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -83,7 +84,7 @@ export default function TabLayout() {
         options={{
           title: 'Pedidos',
           href: vis.pedidos ? undefined : null,
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.clipboard.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={Layout.icon.m} name="list.clipboard.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -91,7 +92,7 @@ export default function TabLayout() {
         options={{
           title: 'Cocina',
           href: vis.cocina ? undefined : null,
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="fork.knife" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={Layout.icon.m} name="fork.knife" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -99,7 +100,7 @@ export default function TabLayout() {
         options={{
           title: 'Inventario',
           href: vis.inventario ? undefined : null,
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="archivebox.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={Layout.icon.m} name="archivebox.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -107,7 +108,7 @@ export default function TabLayout() {
         options={{
           title: 'Reportes',
           href: vis.reportes ? undefined : null,
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.bar.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={Layout.icon.m} name="chart.bar.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -115,7 +116,7 @@ export default function TabLayout() {
         options={{
           title: 'Caja',
           href: vis.caja ? undefined : null,
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="creditcard.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={Layout.icon.m} name="creditcard.fill" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -123,7 +124,7 @@ export default function TabLayout() {
         options={{
           title: 'Domicilios',
           href: vis.domicilios ? undefined : null,
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="creditcard.fill" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={Layout.icon.m} name="creditcard.fill" color={color} />,
         }}
       />
       <Tabs.Screen

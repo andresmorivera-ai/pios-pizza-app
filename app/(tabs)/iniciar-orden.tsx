@@ -1,6 +1,7 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { Layout } from '@/configuracion/constants/Layout';
 import { Link, router } from 'expo-router';
 import { Alert, StyleSheet, TouchableOpacity } from 'react-native';
 
@@ -66,36 +67,36 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 16,
+    paddingTop: Layout.verticalScale(60),
+    paddingHorizontal: Layout.spacing.l,
+    paddingBottom: Layout.spacing.l,
+    gap: Layout.spacing.m,
   },
   backButton: {
-    padding: 8,
+    padding: Layout.spacing.s,
   },
   title: {
-    fontSize: 28,
+    fontSize: Layout.fontSize.xxl,
     fontWeight: 'bold',
     color: '#8B4513',
     flex: 1,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 40,
-    gap: 30,
+    paddingHorizontal: Layout.spacing.l,
+    paddingTop: Layout.spacing.xxl,
+    gap: Layout.spacing.xl,
   },
   subtitle: {
-    fontSize: 18,
+    fontSize: Layout.fontSize.xl,
     color: '#8B4513',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: Layout.spacing.l,
   },
   optionButton: {
     backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: Layout.borderRadius.xl,
+    padding: Layout.spacing.xl,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -104,15 +105,15 @@ const styles = StyleSheet.create({
   },
   optionContent: {
     alignItems: 'center',
-    gap: 16,
+    gap: Layout.spacing.m,
   },
   optionTitle: {
-    fontSize: 20,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
     color: '#8B4513',
   },
   optionDescription: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.l,
     color: '#666',
     textAlign: 'center',
   },

@@ -1,9 +1,11 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -85,6 +87,13 @@ export default function DomiciliosScreen() {
   // Precio del icopor
   const PRECIO_ICOPOR = 500;
 
+  // Recargar clientes recurrentes cuando la pantalla recibe foco
+  useFocusEffect(
+    useCallback(() => {
+      cargarClientesRecurrentes();
+    }, [])
+  );
+
   // Cargar clientes recurrentes desde Supabase
   useEffect(() => {
     cargarClientesRecurrentes();
@@ -115,7 +124,7 @@ export default function DomiciliosScreen() {
       const clienteEncontrado = clientesRecurrentes.find(
         c => c.telefono === datosCliente.telefono
       );
-      
+
       if (clienteEncontrado) {
         setClienteSugerido(clienteEncontrado);
         setModalSugerenciaVisible(true);
@@ -169,7 +178,7 @@ export default function DomiciliosScreen() {
           categoria: p.categoria.trim().toLowerCase()
         }));
         setProductos(productosNormalizados);
-        
+
         if (productosNormalizados.length > 0) {
           const categoriasDisponibles = [...new Set(productosNormalizados.map(p => p.categoria))];
           const primeraCategoria = ordenCategorias.find(c => categoriasDisponibles.includes(c)) || categoriasDisponibles[0];
@@ -186,7 +195,7 @@ export default function DomiciliosScreen() {
   const categorias = categoriasUnicas.sort((a, b) => {
     const indexA = ordenCategorias.indexOf(a);
     const indexB = ordenCategorias.indexOf(b);
-    
+
     if (indexA !== -1 && indexB !== -1) return indexA - indexB;
     if (indexA !== -1) return -1;
     if (indexB !== -1) return 1;
@@ -199,21 +208,21 @@ export default function DomiciliosScreen() {
 
   const productosUnicos = productos.reduce((acc, producto) => {
     if (producto.categoria !== categoriaSeleccionada) return acc;
-    
+
     const nombreNormalizado = normalizarNombre(producto.nombre);
     const existente = acc.find(p => normalizarNombre(p.nombre) === nombreNormalizado);
-    
+
     if (!existente) {
       acc.push(producto);
     }
-    
+
     return acc;
   }, [] as Producto[]);
 
   const obtenerVariantes = (nombreProducto: string): Producto[] => {
     const nombreNormalizado = normalizarNombre(nombreProducto);
-    return productos.filter(p => 
-      normalizarNombre(p.nombre) === nombreNormalizado && 
+    return productos.filter(p =>
+      normalizarNombre(p.nombre) === nombreNormalizado &&
       p.categoria === categoriaSeleccionada
     );
   };
@@ -232,14 +241,14 @@ export default function DomiciliosScreen() {
         cantidad: 1,
         descripcion: variante.descripcion,
       };
-      
+
       setProductosSeleccionados(prev => {
-        const productoExistente = prev.find(p => 
+        const productoExistente = prev.find(p =>
           p.nombre === productoNuevo.nombre && p.tamano === productoNuevo.tamano
         );
-        
+
         if (productoExistente) {
-          return prev.map(p => 
+          return prev.map(p =>
             p.nombre === productoNuevo.nombre && p.tamano === productoNuevo.tamano
               ? { ...p, cantidad: p.cantidad + 1 }
               : p
@@ -248,7 +257,7 @@ export default function DomiciliosScreen() {
           return [...prev, productoNuevo];
         }
       });
-      
+
       setModalVisible(false);
       setProductoParaTamano(null);
       setVarianteSeleccionada(null);
@@ -306,11 +315,11 @@ export default function DomiciliosScreen() {
       Alert.alert('Error', 'Por favor ingresa el nombre del cliente');
       return false;
     }
-    if (!datosCliente.telefono.trim() ) {
+    if (!datosCliente.telefono.trim()) {
       Alert.alert('Error', 'Por favor ingresa el teléfono del cliente');
       return false;
     }
-    
+
     if (datosCliente.telefono.length < 10) {
       Alert.alert('Error', 'El teléfono debe tener al menos 10 dígitos');
       return false;
@@ -324,131 +333,131 @@ export default function DomiciliosScreen() {
 
   // Confirmar y guardar pedido en Supabase - FORMATO CORREGIDO
   const handleConfirmarPedido = async () => {
-  if (productosSeleccionados.length === 0) {
-    Alert.alert('Error', 'Por favor selecciona al menos un producto.');
-    return;
-  }
-
-  if (!validarDatosCliente()) {
-    return;
-  }
-
-  if (guardandoPedido) {
-    return;
-  }
-
-  setGuardandoPedido(true);
-
-  try {
-    const subtotal = calcularSubtotal();
-    const totalIcopores = calcularTotalIcopores();
-    const totalPedido = calcularTotal();
-
-    // GUARDAR DATOS ANTES DE LIMPIAR
-    const productosParaMensaje = [...productosSeleccionados];
-    const icoporesParaMensaje = cantidadIcopores;
-    const clienteRecurrenteInfo = clienteSeleccionado;
-    const datosClienteParaMensaje = { ...datosCliente };
-
-    // 1. Buscar o crear cliente
-    const { data: clienteData, error: clienteError } = await supabase
-      .rpc('buscar_o_crear_cliente', {
-        p_telefono: datosCliente.telefono.trim(),
-        p_nombre: datosCliente.nombre.trim(),
-        p_direccion: datosCliente.direccion.trim(),
-        p_referencia: datosCliente.referencia.trim() || null
-      });
-
-    if (clienteError) {
-      console.error('Error con cliente:', clienteError);
-      Alert.alert('Error', 'No se pudo registrar el cliente.');
-      setGuardandoPedido(false);
+    if (productosSeleccionados.length === 0) {
+      Alert.alert('Error', 'Por favor selecciona al menos un producto.');
       return;
     }
 
-    const clienteId = clienteData;
+    if (!validarDatosCliente()) {
+      return;
+    }
 
-    // 2. Preparar datos de productos en formato string
-    const productosFormateados = productosSeleccionados.map(
-      p => `${p.nombre} (${p.tamano}) $${p.precio} X${p.cantidad}`
-    );
+    if (guardandoPedido) {
+      return;
+    }
 
-    if (cantidadIcopores > 0) {
-      productosFormateados.push(
-        `Icopor (Unitario) $${PRECIO_ICOPOR} X${cantidadIcopores}`
+    setGuardandoPedido(true);
+
+    try {
+      const subtotal = calcularSubtotal();
+      const totalIcopores = calcularTotalIcopores();
+      const totalPedido = calcularTotal();
+
+      // GUARDAR DATOS ANTES DE LIMPIAR
+      const productosParaMensaje = [...productosSeleccionados];
+      const icoporesParaMensaje = cantidadIcopores;
+      const clienteRecurrenteInfo = clienteSeleccionado;
+      const datosClienteParaMensaje = { ...datosCliente };
+
+      // 1. Buscar o crear cliente
+      const { data: clienteData, error: clienteError } = await supabase
+        .rpc('buscar_o_crear_cliente', {
+          p_telefono: datosCliente.telefono.trim(),
+          p_nombre: datosCliente.nombre.trim(),
+          p_direccion: datosCliente.direccion.trim(),
+          p_referencia: datosCliente.referencia.trim() || null
+        });
+
+      if (clienteError) {
+        console.error('Error con cliente:', clienteError);
+        Alert.alert('Error', 'No se pudo registrar el cliente.');
+        setGuardandoPedido(false);
+        return;
+      }
+
+      const clienteId = clienteData;
+
+      // 2. Preparar datos de productos en formato string
+      const productosFormateados = productosSeleccionados.map(
+        p => `${p.nombre} (${p.tamano}) $${p.precio} X${p.cantidad}`
       );
-    }
 
-    // 3. Crear orden en tabla ordenes
-    const { data: ordenData, error: ordenError } = await supabase
-      .from('ordenesgenerales')
-      .insert({
-        tipo: `Domicilio - ${datosCliente.nombre.trim()}`,
-        referencia: `${datosCliente.nombre.trim().toUpperCase()} - ${datosCliente.telefono.trim()} - ${datosCliente.direccion.trim()}- ${datosCliente.referencia.trim() || 'Sin referencia'}`,
-        productos: productosFormateados,
-        total: totalPedido,
-        estado: 'pendiente'
-      })
-      .select()
-      .single();
+      if (cantidadIcopores > 0) {
+        productosFormateados.push(
+          `Icopor (Unitario) $${PRECIO_ICOPOR} X${cantidadIcopores}`
+        );
+      }
 
-    if (ordenError) {
-      console.error('Error creando orden:', ordenError);
-      Alert.alert('Error', 'No se pudo crear la orden.');
-      setGuardandoPedido(false);
-      return;
-    }
+      // 3. Crear orden en tabla ordenes
+      const { data: ordenData, error: ordenError } = await supabase
+        .from('ordenesgenerales')
+        .insert({
+          tipo: `Domicilio - ${datosCliente.nombre.trim()}`,
+          referencia: `${datosCliente.nombre.trim().toUpperCase()} - ${datosCliente.telefono.trim()} - ${datosCliente.direccion.trim()}- ${datosCliente.referencia.trim() || 'Sin referencia'}`,
+          productos: productosFormateados,
+          total: totalPedido,
+          estado: 'pendiente'
+        })
+        .select()
+        .single();
+
+      if (ordenError) {
+        console.error('Error creando orden:', ordenError);
+        Alert.alert('Error', 'No se pudo crear la orden.');
+        setGuardandoPedido(false);
+        return;
+      }
 
 
-    // 4. LIMPIAR FORMULARIO ANTES DE RECARGAR
-    setProductosSeleccionados([]);
-    setCantidadIcopores(0);
-    setDatosCliente({
-      nombre: '',
-      telefono: '',
-      direccion: '',
-      referencia: ''
-    });
-    setClienteSeleccionado(null);
-    setClienteSugerido(null);
+      // 4. LIMPIAR FORMULARIO ANTES DE RECARGAR
+      setProductosSeleccionados([]);
+      setCantidadIcopores(0);
+      setDatosCliente({
+        nombre: '',
+        telefono: '',
+        direccion: '',
+        referencia: ''
+      });
+      setClienteSeleccionado(null);
+      setClienteSugerido(null);
 
-    // 5. AHORA SÍ RECARGAR CLIENTES
-    await cargarClientesRecurrentes();
+      // 5. AHORA SÍ RECARGAR CLIENTES
+      await cargarClientesRecurrentes();
 
-    // 6. Mostrar mensaje con los datos guardados anteriormente
-    const listaProductos = productosParaMensaje
-      .map((producto, index) => 
-        `${index + 1}. ${producto.nombre} (${producto.tamano}) - $${producto.precio.toLocaleString('es-CO')} X${producto.cantidad}`
-      )
-      .join('\n');
+      // 6. Mostrar mensaje con los datos guardados anteriormente
+      const listaProductos = productosParaMensaje
+        .map((producto, index) =>
+          `${index + 1}. ${producto.nombre} (${producto.tamano}) - $${producto.precio.toLocaleString('es-CO')} X${producto.cantidad}`
+        )
+        .join('\n');
 
-    const resumenIcopores = icoporesParaMensaje > 0 
-      ? `\n\n🥡 Icopores: ${icoporesParaMensaje} X $${PRECIO_ICOPOR.toLocaleString('es-CO')} = $${(icoporesParaMensaje * PRECIO_ICOPOR).toLocaleString('es-CO')}` 
-      : '';
+      const resumenIcopores = icoporesParaMensaje > 0
+        ? `\n\n🥡 Icopores: ${icoporesParaMensaje} X $${PRECIO_ICOPOR.toLocaleString('es-CO')} = $${(icoporesParaMensaje * PRECIO_ICOPOR).toLocaleString('es-CO')}`
+        : '';
 
-    const mensajeClienteRecurrente = clienteRecurrenteInfo 
-      ? `\n🎉 Cliente recurrente - Pedido #${clienteRecurrenteInfo.cantidad_pedidos + 1}\n\n`
-      : '\n✨ Cliente nuevo registrado\n\n';
+      const mensajeClienteRecurrente = clienteRecurrenteInfo
+        ? `\n🎉 Cliente recurrente - Pedido #${clienteRecurrenteInfo.cantidad_pedidos + 1}\n\n`
+        : '\n✨ Cliente nuevo registrado\n\n';
 
-    Alert.alert(
-      '✅ Pedido Guardado',
-      `${mensajeClienteRecurrente}Cliente: ${datosClienteParaMensaje.nombre}\nTeléfono: ${datosClienteParaMensaje.telefono}\nDirección: ${datosClienteParaMensaje.direccion}\n${datosClienteParaMensaje.referencia ? `Referencia: ${datosClienteParaMensaje.referencia}\n` : ''}\n${listaProductos}${resumenIcopores}\n\n💰 Total: $${totalPedido.toLocaleString('es-CO')}`,
-      [
-        { 
-          text: 'OK', 
-          onPress: () => {
-            setGuardandoPedido(false);
-            router.back();
+      Alert.alert(
+        '✅ Pedido Guardado',
+        `${mensajeClienteRecurrente}Cliente: ${datosClienteParaMensaje.nombre}\nTeléfono: ${datosClienteParaMensaje.telefono}\nDirección: ${datosClienteParaMensaje.direccion}\n${datosClienteParaMensaje.referencia ? `Referencia: ${datosClienteParaMensaje.referencia}\n` : ''}\n${listaProductos}${resumenIcopores}\n\n💰 Total: $${totalPedido.toLocaleString('es-CO')}`,
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setGuardandoPedido(false);
+              router.back();
+            }
           }
-        }
-      ]
-    );
-  } catch (error) {
-    console.error('Error general:', error);
-    Alert.alert('Error', 'Ocurrió un error al guardar el pedido.');
-    setGuardandoPedido(false);
-  }
-};
+        ]
+      );
+    } catch (error) {
+      console.error('Error general:', error);
+      Alert.alert('Error', 'Ocurrió un error al guardar el pedido.');
+      setGuardandoPedido(false);
+    }
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -462,12 +471,12 @@ export default function DomiciliosScreen() {
         </ThemedText>
       </ThemedView>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView 
-          style={styles.scrollContent} 
+        <ScrollView
+          style={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 20) }}
         >
@@ -479,7 +488,7 @@ export default function DomiciliosScreen() {
                 <ThemedView style={styles.clientesCountBadge}>
                   <IconSymbol name="person.2.fill" size={16} color="#fff" />
                   <ThemedText style={styles.clientesCountTexto}>
-                    {"Clientes: "+clientesRecurrentes.length}
+                    {"Clientes: " + clientesRecurrentes.length}
                   </ThemedText>
                 </ThemedView>
               )}
@@ -507,7 +516,7 @@ export default function DomiciliosScreen() {
                 placeholderTextColor="#999"
                 keyboardType="phone-pad"
                 maxLength={10}
-                
+
                 value={datosCliente.telefono}
                 onChangeText={(text) => setDatosCliente(prev => ({ ...prev, telefono: text }))}
               />
@@ -517,7 +526,7 @@ export default function DomiciliosScreen() {
                 </ThemedView>
               )}
             </ThemedView>
-            
+
             <ThemedView style={styles.inputContainer}>
               <IconSymbol name="person.fill" size={20} color="#FF8C00" />
               <TextInput
@@ -591,7 +600,7 @@ export default function DomiciliosScreen() {
                 const precioMostrar = variantes.length > 1
                   ? `Desde $${precioMin.toLocaleString('es-CO')}`
                   : `$${producto.precio.toLocaleString('es-CO')}`;
-                
+
                 return (
                   <TouchableOpacity
                     key={producto.id}
@@ -611,12 +620,12 @@ export default function DomiciliosScreen() {
             <ThemedText style={styles.seccionTitulo}>🥡 Icopores</ThemedText>
             <ThemedView style={styles.icoporesCard}>
               <ThemedView style={styles.icoporesInfo}>
-                <ThemedText  style={styles.icoporesTexto}>Icopor</ThemedText>
+                <ThemedText style={styles.icoporesTexto}>Icopor</ThemedText>
                 <ThemedText style={styles.icoporesPrecio}>
                   ${PRECIO_ICOPOR.toLocaleString('es-CO')} c/u
                 </ThemedText>
               </ThemedView>
-              
+
               <ThemedView style={styles.cantidadContainer}>
                 <TouchableOpacity
                   style={styles.cantidadButton}
@@ -624,9 +633,9 @@ export default function DomiciliosScreen() {
                 >
                   <ThemedText style={styles.cantidadButtonTexto}>-</ThemedText>
                 </TouchableOpacity>
-                
+
                 <ThemedText style={styles.cantidadTexto}>{cantidadIcopores}</ThemedText>
-                
+
                 <TouchableOpacity
                   style={styles.cantidadButton}
                   onPress={handleIncrementarIcopores}
@@ -635,7 +644,7 @@ export default function DomiciliosScreen() {
                 </TouchableOpacity>
               </ThemedView>
             </ThemedView>
-            
+
             {cantidadIcopores > 0 && (
               <ThemedText style={styles.totalIcoporesTexto}>
                 Total Icopores: ${calcularTotalIcopores().toLocaleString('es-CO')}
@@ -662,7 +671,7 @@ export default function DomiciliosScreen() {
                         Subtotal: ${precioTotal.toLocaleString('es-CO')}
                       </ThemedText>
                     </ThemedView>
-                    
+
                     <ThemedView style={styles.accionesContainer}>
                       <ThemedView style={styles.cantidadContainer}>
                         <TouchableOpacity
@@ -671,9 +680,9 @@ export default function DomiciliosScreen() {
                         >
                           <ThemedText style={styles.cantidadButtonTexto}>-</ThemedText>
                         </TouchableOpacity>
-                        
+
                         <ThemedText style={styles.cantidadTexto}>{producto.cantidad}</ThemedText>
-                        
+
                         <TouchableOpacity
                           style={styles.cantidadButton}
                           onPress={() => handleIncrementarCantidad(index)}
@@ -681,7 +690,7 @@ export default function DomiciliosScreen() {
                           <ThemedText style={styles.cantidadButtonTexto}>+</ThemedText>
                         </TouchableOpacity>
                       </ThemedView>
-                      
+
                       <TouchableOpacity
                         style={styles.eliminarButton}
                         onPress={() => handleEliminarProducto(index)}
@@ -699,14 +708,14 @@ export default function DomiciliosScreen() {
           {(productosSeleccionados.length > 0 || cantidadIcopores > 0) && (
             <ThemedView style={styles.resumenSection}>
               <ThemedText style={styles.seccionTitulo}>💰 Resumen</ThemedText>
-              
+
               <ThemedView style={styles.resumenItem}>
                 <ThemedText style={styles.resumenLabel}>Subtotal Productos:</ThemedText>
                 <ThemedText style={styles.resumenValor}>
                   ${calcularSubtotal().toLocaleString('es-CO')}
                 </ThemedText>
               </ThemedView>
-              
+
               {cantidadIcopores > 0 && (
                 <ThemedView style={styles.resumenItem}>
                   <ThemedText style={styles.resumenLabel}>Icopores ({cantidadIcopores}):</ThemedText>
@@ -715,9 +724,9 @@ export default function DomiciliosScreen() {
                   </ThemedText>
                 </ThemedView>
               )}
-              
+
               <ThemedView style={styles.resumenDivider} />
-              
+
               <ThemedView style={styles.resumenItem}>
                 <ThemedText style={styles.resumenTotal}>TOTAL:</ThemedText>
                 <ThemedText style={styles.resumenTotalValor}>
@@ -729,8 +738,8 @@ export default function DomiciliosScreen() {
 
           {/* Botones de acción */}
           <ThemedView style={styles.actionsContainer}>
-            <TouchableOpacity 
-              style={[styles.confirmButton, guardandoPedido && styles.confirmButtonDisabled]} 
+            <TouchableOpacity
+              style={[styles.confirmButton, guardandoPedido && styles.confirmButtonDisabled]}
               onPress={handleConfirmarPedido}
               disabled={guardandoPedido}
             >
@@ -740,8 +749,8 @@ export default function DomiciliosScreen() {
               </ThemedText>
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.cancelButton} 
+            <TouchableOpacity
+              style={styles.cancelButton}
               onPress={() => router.back()}
               disabled={guardandoPedido}
             >
@@ -773,7 +782,7 @@ export default function DomiciliosScreen() {
                 <ThemedText style={styles.clienteSugeridoTexto}>
                   Ya tenemos información de este número:
                 </ThemedText>
-                
+
                 <ThemedView style={styles.clienteSugeridoCard}>
                   <ThemedView style={styles.clienteSugeridoItem}>
                     <IconSymbol name="person.fill" size={18} color="#FF8C00" />
@@ -852,18 +861,18 @@ export default function DomiciliosScreen() {
                 {productoParaTamano.nombre}
               </ThemedText>
             )}
-            
+
             {varianteSeleccionada && (
               <ThemedText style={styles.modalDescripcion}>
                 {varianteSeleccionada.descripcion}
               </ThemedText>
             )}
-            
+
             <ThemedView style={styles.tamanosContainer}>
               {productoParaTamano && obtenerVariantes(productoParaTamano.nombre).map((variante) => {
                 const tamanoStr = variante.tamano.split(':')[0].trim();
                 const isSelected = varianteSeleccionada?.id === variante.id;
-                
+
                 return (
                   <TouchableOpacity
                     key={variante.id}
@@ -902,7 +911,7 @@ export default function DomiciliosScreen() {
                   <ThemedText style={styles.modalAgregarTexto}>Agregar</ThemedText>
                 </TouchableOpacity>
               )}
-              
+
               <TouchableOpacity
                 style={styles.modalCerrarButton}
                 onPress={() => {
@@ -931,16 +940,16 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 16,
+    paddingHorizontal: Layout.spacing.l,
+    paddingBottom: Layout.spacing.l,
+    gap: Layout.spacing.m,
     backgroundColor: '#fff',
   },
   backButton: {
-    padding: 8,
+    padding: Layout.spacing.s,
   },
   title: {
-    fontSize: 26,
+    fontSize: Layout.fontSize.xxl,
     fontWeight: 'bold',
     color: '#8B4513',
     flex: 1,
@@ -950,11 +959,11 @@ const styles = StyleSheet.create({
   },
   seccionCliente: {
     backgroundColor: '#FFF3E0',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    padding: 16,
-    borderRadius: 15,
-    gap: 12,
+    marginHorizontal: Layout.spacing.l,
+    marginBottom: Layout.spacing.l,
+    padding: Layout.spacing.m,
+    borderRadius: Layout.borderRadius.xl,
+    gap: Layout.spacing.m,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -965,21 +974,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: Layout.spacing.s,
     backgroundColor: '#FFF3E0',
   },
   clientesCountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#2196F3',
-    paddingHorizontal: 10,
+    paddingHorizontal: Layout.spacing.s,
     paddingVertical: 6,
-    borderRadius: 5,
+    borderRadius: Layout.borderRadius.xl,
     gap: 4,
   },
   clientesCountTexto: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: Layout.fontSize.s,
     fontWeight: '700',
   },
   clienteSeleccionadoBadge: {
@@ -987,65 +996,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#C8E6C9',
-    paddingHorizontal: 12,
+    paddingHorizontal: Layout.spacing.m,
     paddingVertical: 10,
-    borderRadius: 10,
-    marginBottom: 8,
+    borderRadius: Layout.borderRadius.l,
+    marginBottom: Layout.spacing.s,
     borderWidth: 1,
     borderColor: '#81C784',
   },
   clienteSeleccionadoInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Layout.spacing.s,
     flex: 1,
     backgroundColor: '#C8E6C9',
   },
   clienteSeleccionadoTexto: {
-    fontSize: 13,
+    fontSize: Layout.fontSize.s,
     fontWeight: '600',
     color: '#27702bff',
     flex: 1,
     backgroundColor: '#C8E6C9',
   },
   telefonoEncontradoIndicador: {
-    marginLeft: 8,
+    marginLeft: Layout.spacing.s,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: Layout.borderRadius.l,
+    paddingHorizontal: Layout.spacing.m,
+    paddingVertical: Layout.spacing.s,
     gap: 10,
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: Layout.fontSize.m,
     color: '#333',
-    paddingVertical: 8,
+    paddingVertical: Layout.spacing.s,
   },
   seccionTitulo: {
-    fontSize: 18,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
     color: '#8B4513',
-    marginBottom: 12,
+    marginBottom: Layout.spacing.m,
   },
   categoriasContainer: {
-    marginBottom: 20,
-    paddingHorizontal: 20,
+    marginBottom: Layout.spacing.l,
+    paddingHorizontal: Layout.spacing.l,
   },
   categoriasScroll: {
     flexDirection: 'row',
   },
   categoriaButton: {
     backgroundColor: '#f0f0f0',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
+    paddingHorizontal: Layout.spacing.l,
+    paddingVertical: Layout.spacing.m,
+    borderRadius: Layout.borderRadius.xl,
     marginRight: 10,
     borderWidth: 2,
     borderColor: '#f0f0f0',
@@ -1055,7 +1064,7 @@ const styles = StyleSheet.create({
     borderColor: '#FF8C00',
   },
   categoriaTexto: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.l,
     color: '#8B4513',
     fontWeight: '600',
   },
@@ -1063,19 +1072,19 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   productosSection: {
-    marginBottom: 20,
-    paddingHorizontal: 20,
+    marginBottom: Layout.spacing.l,
+    paddingHorizontal: Layout.spacing.l,
   },
   productosGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: Layout.spacing.m,
   },
   productoCard: {
-    width: '48%',
+    width: Layout.isTablet ? '31%' : '47%',
     backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 16,
+    borderRadius: Layout.borderRadius.xl,
+    padding: Layout.spacing.m,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1087,30 +1096,30 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   productoNombre: {
-    fontSize: 17,
+    fontSize: Layout.fontSize.m,
     fontWeight: 'bold',
     color: '#8B4513',
     marginBottom: 8,
     textAlign: 'center',
   },
   productoPrecio: {
-    fontSize: 18,
+    fontSize: Layout.fontSize.m,
     fontWeight: 'bold',
     color: '#FF8C00',
     textAlign: 'center',
   },
   icoporesSection: {
-    marginBottom: 20,
-    paddingHorizontal: 20,
+    marginBottom: Layout.spacing.l,
+    paddingHorizontal: Layout.spacing.l,
   },
   icoporesCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#E3F2FD',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
+    backgroundColor: '#fff',
+    borderRadius: Layout.borderRadius.l,
+    padding: Layout.spacing.m,
+    marginBottom: Layout.spacing.s,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1119,39 +1128,36 @@ const styles = StyleSheet.create({
   },
   icoporesInfo: {
     flex: 1,
-    backgroundColor: '#E3F2FD',
   },
   icoporesTexto: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.l,
     fontWeight: '600',
     color: '#8B4513',
     marginBottom: 4,
-    
   },
   icoporesPrecio: {
-    fontSize: 14,
+    fontSize: Layout.fontSize.m,
     color: '#666',
   },
   totalIcoporesTexto: {
-    fontSize: 15,
+    fontSize: Layout.fontSize.m,
     fontWeight: 'bold',
     color: '#2196F3',
     textAlign: 'right',
     marginTop: 4,
-    
   },
   seleccionadosSection: {
-    marginBottom: 20,
-    paddingHorizontal: 20,
+    marginBottom: Layout.spacing.l,
+    paddingHorizontal: Layout.spacing.l,
   },
   seleccionadoItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: Layout.borderRadius.l,
+    padding: Layout.spacing.m,
+    marginBottom: Layout.spacing.s,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1162,21 +1168,20 @@ const styles = StyleSheet.create({
   },
   seleccionadoInfo: {
     flex: 1,
-    
   },
   seleccionadoNombre: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.l,
     fontWeight: '600',
     color: '#8B4513',
     marginBottom: 4,
   },
   seleccionadoTamano: {
-    fontSize: 13,
+    fontSize: Layout.fontSize.s,
     color: '#666',
     marginTop: 2,
   },
   seleccionadoPrecioTotal: {
-    fontSize: 15,
+    fontSize: Layout.fontSize.m,
     fontWeight: 'bold',
     color: '#FF8C00',
     marginTop: 4,
@@ -1203,11 +1208,11 @@ const styles = StyleSheet.create({
   },
   cantidadButtonTexto: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
   },
   cantidadTexto: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.l,
     fontWeight: 'bold',
     color: '#8B4513',
     paddingHorizontal: 16,
@@ -1215,14 +1220,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   eliminarButton: {
-    padding: 8,
+    padding: Layout.spacing.s,
   },
   resumenSection: {
     backgroundColor: '#F5F5F5',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    padding: 16,
-    borderRadius: 15,
+    marginHorizontal: Layout.spacing.l,
+    marginBottom: Layout.spacing.l,
+    padding: Layout.spacing.m,
+    borderRadius: Layout.borderRadius.xl,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1237,42 +1242,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
   },
   resumenLabel: {
-    fontSize: 15,
+    fontSize: Layout.fontSize.m,
     color: '#666',
     fontWeight: '500',
   },
   resumenValor: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.l,
     fontWeight: 'bold',
     color: '#8B4513',
   },
   resumenDivider: {
     height: 1,
     backgroundColor: '#ddd',
-    marginVertical: 12,
+    marginVertical: Layout.spacing.m,
   },
   resumenTotal: {
-    fontSize: 18,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
     color: '#8B4513',
   },
   resumenTotalValor: {
-    fontSize: 22,
+    fontSize: Layout.fontSize.xxl,
     fontWeight: 'bold',
     color: '#28A745',
   },
   actionsContainer: {
-    gap: 16,
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    gap: Layout.spacing.m,
+    paddingHorizontal: Layout.spacing.l,
+    marginBottom: Layout.spacing.l,
   },
   confirmButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#28A745',
-    padding: 16,
-    borderRadius: 15,
+    padding: Layout.spacing.m,
+    borderRadius: Layout.borderRadius.xl,
     gap: 12,
     elevation: 4,
     shadowColor: '#000',
@@ -1286,7 +1291,7 @@ const styles = StyleSheet.create({
   },
   confirmButtonText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: Layout.fontSize.l,
     fontWeight: 'bold',
   },
   cancelButton: {
@@ -1294,13 +1299,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#DC3545',
-    padding: 16,
-    borderRadius: 15,
+    padding: Layout.spacing.m,
+    borderRadius: Layout.borderRadius.xl,
     gap: 12,
   },
   cancelButtonText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: Layout.fontSize.l,
     fontWeight: 'bold',
   },
   modalOverlay: {
@@ -1308,12 +1313,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: Layout.spacing.l,
   },
   modalSugerenciaContent: {
     backgroundColor: '#fff',
-    borderRadius: 25,
-    padding: 24,
+    borderRadius: Layout.borderRadius.xl,
+    padding: Layout.spacing.xl,
     width: '92%',
     maxWidth: 450,
     elevation: 8,
@@ -1324,35 +1329,32 @@ const styles = StyleSheet.create({
   },
   modalSugerenciaHeader: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: Layout.spacing.l,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
-    
   },
   modalSugerenciaTitulo: {
-    fontSize: 22,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
     color: '#4CAF50',
-    marginTop: 12,
+    marginTop: Layout.spacing.m,
     textAlign: 'center',
   },
   clienteSugeridoInfo: {
-    marginBottom: 20,
-    
+    marginBottom: Layout.spacing.l,
   },
   clienteSugeridoTexto: {
-    fontSize: 15,
+    fontSize: Layout.fontSize.m,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 16,
-    
+    marginBottom: Layout.spacing.m,
   },
   clienteSugeridoCard: {
     backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
+    borderRadius: Layout.borderRadius.l,
+    padding: Layout.spacing.m,
+    gap: Layout.spacing.m,
   },
   clienteSugeridoItem: {
     flexDirection: 'row',
@@ -1361,13 +1363,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
   },
   clienteSugeridoLabel: {
-    fontSize: 14,
+    fontSize: Layout.fontSize.m,
     fontWeight: '600',
     color: '#8B4513',
     width: 80,
   },
   clienteSugeridoValor: {
-    fontSize: 14,
+    fontSize: Layout.fontSize.m,
     color: '#333',
     flex: 1,
   },
@@ -1379,19 +1381,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pedidosHistorialTexto: {
-    fontSize: 13,
+    fontSize: Layout.fontSize.s,
     fontWeight: '600',
     color: '#1976D2',
   },
   clienteSugeridoPregunta: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.l,
     fontWeight: '600',
     color: '#8B4513',
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: Layout.spacing.m,
   },
   modalSugerenciaBotones: {
-    gap: 12,
+    gap: Layout.spacing.m,
   },
   modalSugerenciaAceptarButton: {
     flexDirection: 'row',
@@ -1399,8 +1401,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#4CAF50',
     paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
+    paddingHorizontal: Layout.spacing.l,
+    borderRadius: Layout.borderRadius.l,
     gap: 8,
     elevation: 3,
     shadowColor: '#000',
@@ -1409,7 +1411,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   modalSugerenciaAceptarTexto: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.l,
     fontWeight: 'bold',
     color: '#fff',
   },
@@ -1419,18 +1421,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#E8E8E8',
     paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
+    paddingHorizontal: Layout.spacing.l,
+    borderRadius: Layout.borderRadius.l,
     gap: 8,
   },
   modalSugerenciaRechazarTexto: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.l,
     fontWeight: '600',
     color: '#666',
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderRadius: 25,
+    borderRadius: Layout.borderRadius.xl,
     padding: 28,
     width: '90%',
     maxWidth: 420,
@@ -1441,37 +1443,37 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   modalTitulo: {
-    fontSize: 24,
+    fontSize: Layout.fontSize.xxl,
     fontWeight: 'bold',
     color: '#8B4513',
     textAlign: 'center',
     marginBottom: 10,
   },
   modalProducto: {
-    fontSize: 20,
+    fontSize: Layout.fontSize.xl,
     color: '#FF8C00',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: Layout.spacing.m,
     fontWeight: '700',
   },
   modalDescripcion: {
-    fontSize: 15,
+    fontSize: Layout.fontSize.m,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: Layout.spacing.l,
     fontStyle: 'italic',
     paddingHorizontal: 10,
     lineHeight: 22,
   },
   tamanosContainer: {
-    marginBottom: 20,
+    marginBottom: Layout.spacing.l,
   },
   tamanoButton: {
     backgroundColor: '#FF8C00',
     paddingVertical: 18,
-    paddingHorizontal: 20,
-    borderRadius: 15,
-    marginBottom: 12,
+    paddingHorizontal: Layout.spacing.l,
+    borderRadius: Layout.borderRadius.xl,
+    marginBottom: Layout.spacing.m,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1489,13 +1491,13 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   tamanoTexto: {
-    fontSize: 18,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
     color: '#fff',
     flex: 1,
   },
   tamanoPrecio: {
-    fontSize: 20,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
     color: '#fff',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -1504,13 +1506,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   modalBotonesContainer: {
-    gap: 12,
+    gap: Layout.spacing.m,
   },
   modalAgregarButton: {
     backgroundColor: '#4CAF50',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 15,
+    paddingVertical: Layout.spacing.m,
+    paddingHorizontal: Layout.spacing.l,
+    borderRadius: Layout.borderRadius.xl,
     alignItems: 'center',
     elevation: 3,
     shadowColor: '#000',
@@ -1519,15 +1521,15 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
   },
   modalAgregarTexto: {
-    fontSize: 18,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
     color: '#fff',
   },
   modalCerrarButton: {
     backgroundColor: '#E8E8E8',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 15,
+    paddingVertical: Layout.spacing.m,
+    paddingHorizontal: Layout.spacing.l,
+    borderRadius: Layout.borderRadius.xl,
     alignItems: 'center',
     elevation: 2,
     shadowColor: '#000',
@@ -1536,7 +1538,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   modalCerrarTexto: {
-    fontSize: 17,
+    fontSize: Layout.fontSize.l,
     fontWeight: '700',
     color: '#666',
   },

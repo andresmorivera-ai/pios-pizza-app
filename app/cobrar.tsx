@@ -1,9 +1,11 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -48,10 +50,17 @@ export default function CobrarScreen() {
     }
   }, []);
 
+  // Recargar datos cuando la pantalla recibe foco
+  useFocusEffect(
+    useCallback(() => {
+      cargarOrdenesGenerales();
+    }, [cargarOrdenesGenerales])
+  );
+
   // Cargar órdenes generales al montar
   useEffect(() => {
     cargarOrdenesGenerales();
-    
+
     // Suscripción en tiempo real a cambios en ordenesgenerales
     const subscription = supabase
       .channel('ordenes-generales-cobrar-realtime')
@@ -76,7 +85,7 @@ export default function CobrarScreen() {
   // Filtrar órdenes con estado "pendiente_por_pagar" (pendientes de pago)
   const ordenesPendientesMesas = ordenes.filter(orden => orden.estado === 'pendiente_por_pagar');
   const ordenesGeneralesPendientes = ordenesGenerales.filter(orden => orden.estado === 'pendiente_por_pagar');
-  
+
   // Combinar todas las órdenes pendientes
   const todasLasOrdenesPendientes = ordenesPendientesMesas.length + ordenesGeneralesPendientes.length;
 
@@ -118,7 +127,7 @@ export default function CobrarScreen() {
         </View>
         <ThemedText style={styles.totalText}>${item.total.toLocaleString()}</ThemedText>
       </View>
-      
+
       <View style={styles.ordenInfo}>
         <ThemedText style={styles.itemsText}>
           {item.productos.length} {item.productos.length === 1 ? 'item' : 'items'}
@@ -128,8 +137,8 @@ export default function CobrarScreen() {
         </ThemedText>
       </View>
 
-      <TouchableOpacity 
-        style={styles.cobrarButton} 
+      <TouchableOpacity
+        style={styles.cobrarButton}
         onPress={() => handleCobrarOrden(item)}
       >
         <IconSymbol name="creditcard.fill" size={20} color="#fff" />
@@ -143,16 +152,16 @@ export default function CobrarScreen() {
     <View style={styles.ordenCard}>
       <View style={styles.ordenHeader}>
         <View style={styles.mesaContainer}>
-          <IconSymbol 
-            name={item.tipo.toLowerCase().includes('domicilio') ? 'car.fill' : 'bag.fill'} 
-            size={20} 
-            color="#8B4513" 
+          <IconSymbol
+            name={item.tipo.toLowerCase().includes('domicilio') ? 'car.fill' : 'bag.fill'}
+            size={20}
+            color="#8B4513"
           />
           <ThemedText style={styles.mesaText}>{item.tipo}</ThemedText>
         </View>
         <ThemedText style={styles.totalText}>${item.total.toLocaleString()}</ThemedText>
       </View>
-      
+
       {item.referencia && (
         <View style={styles.referenciaContainer}>
           <IconSymbol name="info.circle" size={14} color="#666" />
@@ -169,8 +178,8 @@ export default function CobrarScreen() {
         </ThemedText>
       </View>
 
-      <TouchableOpacity 
-        style={styles.cobrarButton} 
+      <TouchableOpacity
+        style={styles.cobrarButton}
         onPress={() => handleCobrarOrdenGeneral(item)}
       >
         <IconSymbol name="creditcard.fill" size={20} color="#fff" />
@@ -198,7 +207,7 @@ export default function CobrarScreen() {
           </ThemedText>
         </ThemedView>
       ) : (
-        <ScrollView 
+        <ScrollView
           style={styles.listContainer}
           contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 20) }}
           showsVerticalScrollIndicator={false}
@@ -231,11 +240,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingHorizontal: Layout.spacing.l,
+    paddingBottom: Layout.spacing.l,
   },
   title: {
-    fontSize: 28,
+    fontSize: Layout.fontSize.xxl,
     fontWeight: 'bold',
     color: '#8B4513',
   },
@@ -243,33 +252,33 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: Layout.spacing.xxxl,
     marginTop: -100,
   },
   emptyTitle: {
-    fontSize: 24,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
     color: '#8B4513',
-    marginTop: 16,
+    marginTop: Layout.spacing.m,
     textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 16,
+    fontSize: Layout.fontSize.m,
     color: '#8B4513',
-    marginTop: 8,
+    marginTop: Layout.spacing.s,
     textAlign: 'center',
     opacity: 0.7,
   },
   listContainer: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 5,
+    paddingHorizontal: Layout.spacing.l,
+    paddingTop: Layout.spacing.xs,
   },
   ordenCard: {
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+    borderRadius: Layout.borderRadius.xl,
+    padding: Layout.spacing.l,
+    marginBottom: Layout.spacing.m,
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -280,47 +289,47 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: Layout.spacing.m,
   },
   mesaContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Layout.spacing.s,
   },
   mesaText: {
-    fontSize: 18,
+    fontSize: Layout.fontSize.l,
     fontWeight: 'bold',
     color: '#8B4513',
   },
   totalText: {
-    fontSize: 20,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
     color: '#32CD32',
   },
   referenciaContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Layout.spacing.xs,
     backgroundColor: '#f0f0f0',
-    padding: 8,
-    borderRadius: 8,
-    marginBottom: 12,
+    padding: Layout.spacing.s,
+    borderRadius: Layout.borderRadius.m,
+    marginBottom: Layout.spacing.m,
   },
   referenciaText: {
-    fontSize: 12,
+    fontSize: Layout.fontSize.s,
     color: '#666',
     flex: 1,
   },
   ordenInfo: {
-    marginBottom: 16,
+    marginBottom: Layout.spacing.m,
   },
   itemsText: {
-    fontSize: 14,
+    fontSize: Layout.fontSize.m,
     color: '#8B4513',
-    marginBottom: 4,
+    marginBottom: Layout.spacing.xs,
   },
   fechaText: {
-    fontSize: 12,
+    fontSize: Layout.fontSize.s,
     color: '#8B4513',
     opacity: 0.7,
   },
@@ -329,14 +338,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
+    paddingVertical: Layout.spacing.m,
+    paddingHorizontal: Layout.spacing.l,
+    borderRadius: Layout.borderRadius.l,
+    gap: Layout.spacing.s,
   },
   cobrarButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: Layout.fontSize.m,
     fontWeight: 'bold',
   },
 });

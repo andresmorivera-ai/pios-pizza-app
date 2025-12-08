@@ -8,7 +8,7 @@ import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const extractErrorMessage = (error: unknown) => {
@@ -71,6 +71,10 @@ export default function ReportesScreen() {
   const [calendarioVisible, setCalendarioVisible] = useState(false);
   const [rangoSeleccionado, setRangoSeleccionado] = useState(() => getTodayRange());
   const [vistaActiva, setVistaActiva] = useState<'ventas' | 'gastos'>('ventas');
+  const [finalizarDiaVisible, setFinalizarDiaVisible] = useState(false);
+  const [confirmacionVisible, setConfirmacionVisible] = useState(false);
+  const [resumenVisible, setResumenVisible] = useState(false);
+  const [montoAhorrar, setMontoAhorrar] = useState(0);
   const insets = useSafeAreaInsets();
 
   const esHoyRange = useMemo(() => isTodayRange(rangoSeleccionado.inicioDia, rangoSeleccionado.finDia), [rangoSeleccionado]);
@@ -393,6 +397,11 @@ export default function ReportesScreen() {
     cargarGastos(nuevoRango);
   };
 
+  const handleFinalizarDia = () => {
+    setConfirmacionVisible(false);
+    setResumenVisible(true);
+  };
+
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
@@ -562,7 +571,138 @@ export default function ReportesScreen() {
           )}
         </ThemedView>
 
+        {/* Botón Finalizar Día */}
+        {esHoyRange && (
+          <ThemedView style={styles.section}>
+            <TouchableOpacity
+              style={styles.finalizarDiaButton}
+              onPress={() => setConfirmacionVisible(true)}
+            >
+              <IconSymbol name="moon.stars.fill" size={24} color="#fff" />
+              <ThemedText style={styles.finalizarDiaTexto}>Finalizar Día</ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
+        )}
       </ScrollView>
+
+      {/* Modal de Confirmación */}
+      <Modal
+        visible={confirmacionVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmacionVisible(false)}
+      >
+        <ThemedView style={styles.modalOverlay}>
+          <ThemedView style={styles.confirmacionModal}>
+            <IconSymbol name="exclamationmark.triangle.fill" size={48} color="#FF8C00" />
+            <ThemedText style={styles.confirmacionTitulo}>¿Finalizar el día?</ThemedText>
+            <ThemedText style={styles.confirmacionMensaje}>
+              Se mostrará el resumen del día con las ventas y gastos totales
+            </ThemedText>
+            <ThemedView style={styles.confirmacionBotones}>
+              <TouchableOpacity
+                style={styles.botonCancelar}
+                onPress={() => setConfirmacionVisible(false)}
+              >
+                <ThemedText style={styles.botonCancelarTexto}>Cancelar</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.botonConfirmar}
+                onPress={handleFinalizarDia}
+              >
+                <ThemedText style={styles.botonConfirmarTexto}>Confirmar</ThemedText>
+              </TouchableOpacity>
+            </ThemedView>
+          </ThemedView>
+        </ThemedView>
+      </Modal>
+
+      {/* Modal de Resumen del Día */}
+      <Modal
+        visible={resumenVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setResumenVisible(false)}
+      >
+        <ThemedView style={styles.modalOverlay}>
+          <ThemedView style={styles.resumenModal}>
+            <ThemedView style={styles.resumenHeader}>
+              <IconSymbol name="star.fill" size={40} color="#FFD700" />
+              <ThemedText style={styles.resumenTitulo}>Resumen del Día</ThemedText>
+              <ThemedText style={styles.resumenFecha}>
+                {new Date().toLocaleDateString('es-ES', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </ThemedText>
+            </ThemedView>
+
+            <ThemedView style={styles.resumenContenido}>
+              <ThemedView style={styles.resumenItem}>
+                <IconSymbol name="arrow.up.circle.fill" size={32} color="#28A745" />
+                <ThemedView style={styles.resumenItemInfo}>
+                  <ThemedText style={styles.resumenItemLabel}>Ventas Totales</ThemedText>
+                  <ThemedText style={styles.resumenItemValor}>
+                    ${totalGanancias.toLocaleString('es-CO')}
+                  </ThemedText>
+                </ThemedView>
+              </ThemedView>
+
+              <ThemedView style={styles.resumenItem}>
+                <IconSymbol name="arrow.down.circle.fill" size={32} color="#DC3545" />
+                <ThemedView style={styles.resumenItemInfo}>
+                  <ThemedText style={styles.resumenItemLabel}>Gastos Totales</ThemedText>
+                  <ThemedText style={styles.resumenItemValor}>
+                    ${totalGastos.toLocaleString('es-CO')}
+                  </ThemedText>
+                </ThemedView>
+              </ThemedView>
+
+              <ThemedView style={styles.resumenDivider} />
+
+              <ThemedView style={styles.resumenBalance}>
+                <ThemedText style={styles.resumenBalanceLabel}>Balance Final</ThemedText>
+                <ThemedText style={styles.resumenBalanceValor}>
+                  ${(balance - montoAhorrar).toLocaleString('es-CO')}
+                </ThemedText>
+              </ThemedView>
+
+              <ThemedView style={styles.ahorroContainer}>
+                <ThemedText style={styles.ahorroLabel}>¿Cuánto deseas ahorrar?</ThemedText>
+                <TextInput
+                  style={styles.ahorroInput}
+                  placeholder="$0"
+                  keyboardType="numeric"
+                  value={montoAhorrar > 0 ? montoAhorrar.toString() : ''}
+                  onChangeText={(text) => {
+                    const monto = parseInt(text.replace(/[^0-9]/g, '')) || 0;
+                    setMontoAhorrar(monto);
+                  }}
+                />
+                {montoAhorrar > 0 && (
+                  <ThemedText style={styles.balanceFinalTexto}>
+                    Balance después de ahorrar: ${(balance - montoAhorrar).toLocaleString('es-CO')}
+                  </ThemedText>
+                )}
+              </ThemedView>
+            </ThemedView>
+
+            <TouchableOpacity
+              style={styles.cerrarResumenButton}
+              onPress={() => {
+                setResumenVisible(false);
+                setMontoAhorrar(0);
+              }}
+            >
+              <ThemedText style={styles.cerrarResumenTexto}>Cerrar</ThemedText>
+            </TouchableOpacity>
+          </ThemedView>
+        </ThemedView>
+      </Modal>
+
+      {/* Modal de Calendario */}
       <CalendarioRango
         visible={calendarioVisible}
         onClose={() => setCalendarioVisible(false)}
@@ -945,7 +1085,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 4,
-    flexWrap: 'wrap', // Permitir que el contenido baje si es necesario
+    flexWrap: 'wrap',
   },
   cantidadBadgeReporte: {
     backgroundColor: '#9C27B0',
@@ -972,8 +1112,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     marginBottom: 2,
-    flex: 1, // Permitir que el texto ocupe el espacio disponible
-    flexWrap: 'wrap', // Envolver texto largo
+    flex: 1,
+    flexWrap: 'wrap',
   },
   ordenFooter: {
     flexDirection: 'row',
@@ -1004,6 +1144,226 @@ const styles = StyleSheet.create({
   metodoPagoTexto: {
     color: '#fff',
     fontSize: 12,
+    fontWeight: 'bold',
+  },
+  // Estilos para el botón "Finalizar Día"
+  finalizarDiaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#DC143C', // Rojo carmesí vibrante
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#FF6B6B', // Borde rojo más claro para efecto de brillo
+    elevation: 6,
+    shadowColor: '#DC143C',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+  },
+  finalizarDiaTexto: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  // Estilos para modales
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Modal de confirmación
+  confirmacionModal: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    width: '85%',
+    maxWidth: 400,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  confirmacionTitulo: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#8B4513',
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  confirmacionMensaje: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  confirmacionBotones: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  botonCancelar: {
+    flex: 1,
+    backgroundColor: '#f0f0f0',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  botonCancelarTexto: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  botonConfirmar: {
+    flex: 1,
+    backgroundColor: '#FF8C00',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  botonConfirmarTexto: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // Modal de resumen
+  resumenModal: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    width: '90%',
+    maxWidth: 450,
+    maxHeight: '85%',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  resumenHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: '#FFD700',
+  },
+  resumenTitulo: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#8B4513',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  resumenFecha: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    textTransform: 'capitalize',
+  },
+  resumenContenido: {
+    marginBottom: 20,
+  },
+  resumenItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    backgroundColor: '#f8f9fa',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  resumenItemInfo: {
+    flex: 1,
+  },
+  resumenItemLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  resumenItemValor: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#8B4513',
+  },
+  resumenDivider: {
+    height: 2,
+    backgroundColor: '#e0e0e0',
+    marginVertical: 16,
+  },
+  resumenBalance: {
+    backgroundColor: '#FFF8E1',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#FF8C00',
+  },
+  resumenBalanceLabel: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 8,
+  },
+  resumenBalanceValor: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FF8C00',
+  },
+  ahorroContainer: {
+    backgroundColor: '#f8f9fa',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  ahorroLabel: {
+    fontSize: 15,
+    color: '#8B4513',
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  ahorroInput: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#FF8C00',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#8B4513',
+    textAlign: 'center',
+  },
+  balanceFinalTexto: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 12,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  cerrarResumenButton: {
+    backgroundColor: '#8B4513',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  cerrarResumenTexto: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });

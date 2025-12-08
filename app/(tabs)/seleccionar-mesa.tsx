@@ -1,11 +1,13 @@
 import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
+import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
 import { Link, router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 const formatErrorMessage = (error: unknown) => {
   if (error instanceof Error) return error.message;
   if (typeof error === 'object') {
@@ -292,31 +294,31 @@ export default function SeleccionarMesaScreen() {
               <ThemedText style={styles.leyendaTexto}>Pagado</ThemedText>
             </ThemedView>
           </ThemedView>
-          
+
         </ThemedView>
-        <ThemedView style={[styles.mainButtonsContainer, { 
-                paddingBottom: Math.max(insets.bottom + 30, 30)
-              }]}>
-                {/* Pedidos → Visible para todos */}
-                <TouchableOpacity style={styles.mainButton} onPress={handlellevar}>
-                  <IconSymbol name="bag.fill" size={28} color="#FF8C00" />
-                  <ThemedText style={styles.mainButtonText}>Llevar</ThemedText>
-                </TouchableOpacity>
-        
-                {/* Solo Admin → Inventario */}
-                
-                  <TouchableOpacity style={styles.mainButton} onPress={handleDomicilio}>
-                    <IconSymbol name="motorcycle.fill" size={28} color="#FF8C00" />
-                    <ThemedText style={styles.mainButtonText}>Domicilio</ThemedText>
-                  </TouchableOpacity>
-                
-        
-                {/* Solo Admin → Reportes */}
-                
-                
-              </ThemedView>
+        <ThemedView style={[styles.mainButtonsContainer, {
+          paddingBottom: Math.max(insets.bottom + 30, 30)
+        }]}>
+          {/* Pedidos → Visible para todos */}
+          <TouchableOpacity style={styles.mainButton} onPress={handlellevar}>
+            <IconSymbol name="bag.fill" size={28} color="#FF8C00" />
+            <ThemedText style={styles.mainButtonText}>Llevar</ThemedText>
+          </TouchableOpacity>
+
+          {/* Solo Admin → Inventario */}
+
+          <TouchableOpacity style={styles.mainButton} onPress={handleDomicilio}>
+            <IconSymbol name="motorcycle.fill" size={28} color="#FF8C00" />
+            <ThemedText style={styles.mainButtonText}>Domicilio</ThemedText>
+          </TouchableOpacity>
+
+
+          {/* Solo Admin → Reportes */}
+
+
+        </ThemedView>
       </ScrollView>
-      
+
     </ThemedView>
   );
 }
@@ -326,32 +328,32 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 45,
-    paddingHorizontal: 20,
-    paddingBottom: 10,
-    gap: 16,
+    paddingTop: Layout.verticalScale(45),
+    paddingHorizontal: Layout.spacing.l,
+    paddingBottom: Layout.spacing.s,
+    gap: Layout.spacing.m,
   },
 
-  backButton: { padding: 8 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#8B4513', flex: 1 },
+  backButton: { padding: Layout.spacing.s },
+  title: { fontSize: Layout.fontSize.xxl, fontWeight: 'bold', color: '#8B4513', flex: 1 },
   content: { flex: 1 },
-  contentContainer: { paddingHorizontal: 20, paddingBottom: 15 },
+  contentContainer: { paddingHorizontal: Layout.spacing.l, paddingBottom: Layout.spacing.m },
   subtitle: {
-    fontSize: 15,
+    fontSize: Layout.fontSize.m,
     color: '#8B4513',
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: Layout.spacing.s,
   },
   mesasGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
-    gap: 10,
-    marginBottom: 8,
+    gap: Layout.spacing.s,
+    marginBottom: Layout.spacing.s,
   },
   mesaButton: {
     aspectRatio: 1,
-    borderRadius: 15,
+    borderRadius: Layout.borderRadius.xl,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 3,
@@ -366,38 +368,38 @@ const styles = StyleSheet.create({
     borderColor: '#000000',
     borderWidth: 4
   },
-  mesaText: { fontSize: 28, fontWeight: '300', color: '#8B4513', textAlign: 'center' },
+  mesaText: { fontSize: Layout.fontSize.xxl, fontWeight: '300', color: '#8B4513', textAlign: 'center' },
   mesaTextConOrden: { color: '#fff', fontWeight: 'bold' },
   leyendaContainer: {
     backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 5,
+    padding: Layout.spacing.m,
+    borderRadius: Layout.borderRadius.l,
+    marginBottom: Layout.spacing.xs,
     elevation: 3,
   },
   leyendaTitulo: {
-    fontSize: 15,
+    fontSize: Layout.fontSize.m,
     fontWeight: 'bold',
     color: '#8B4513',
-    marginBottom: 8,
+    marginBottom: Layout.spacing.s,
     textAlign: 'center',
   },
   leyendaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    marginBottom: Layout.spacing.xs,
   },
-  leyendaItem: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-  colorBox: { width: 24, height: 24, borderRadius: 5 },
-  leyendaTexto: { fontSize: 13, color: '#555', fontWeight: '500' },
+  leyendaItem: { flexDirection: 'row', alignItems: 'center', gap: Layout.spacing.s, flex: 1 },
+  colorBox: { width: Layout.icon.m, height: Layout.icon.m, borderRadius: Layout.borderRadius.s },
+  leyendaTexto: { fontSize: Layout.fontSize.s, color: '#555', fontWeight: '500' },
   errorBanner: {
-    marginHorizontal: 20,
-    marginBottom: 10,
-    borderRadius: 12,
+    marginHorizontal: Layout.spacing.l,
+    marginBottom: Layout.spacing.s,
+    borderRadius: Layout.borderRadius.l,
     borderWidth: 1,
     borderColor: '#FF8C00',
     backgroundColor: '#FFF7F0',
-    padding: 10,
+    padding: Layout.spacing.s,
   },
   errorBannerText: {
     color: '#8B0000',
@@ -407,9 +409,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    paddingVertical: Layout.spacing.l,
+    paddingHorizontal: Layout.spacing.m,
+    borderRadius: Layout.borderRadius.xl,
     minWidth: 100,
     elevation: 6,
     shadowColor: '#000',
@@ -418,8 +420,8 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
   mainButtonText: {
-    marginTop: 8,
-    fontSize: 16,
+    marginTop: Layout.spacing.s,
+    fontSize: Layout.fontSize.l,
     fontWeight: '600',
     color: '#8B4513',
     textAlign: 'center',
@@ -427,9 +429,7 @@ const styles = StyleSheet.create({
   mainButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: Layout.spacing.l,
+    paddingVertical: Layout.spacing.l,
   },
 });
-
-
