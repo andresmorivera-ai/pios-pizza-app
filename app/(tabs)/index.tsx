@@ -23,7 +23,8 @@ export default function HomeScreen() {
   const handlePedidos = () => router.push('/pedidos');
   const handleInventario = () => router.push('/(tabs)/InventarioScreen');
   const handleReportes = () => router.push('/(tabs)/reportes');
-
+const handleAhorros = () => router.push('/(tabs)/ahorrosScreen');
+const handleCocina = () => router.push('/(tabs)/CocinaScreen');
   const handleCobrar = () => {
     router.push('/cobrar');
   };
@@ -82,7 +83,28 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
       </ThemedView>
+{/* Botones de navegación 2*/}
+      <ThemedView style={[styles.mainButtonsContainer, { 
+        paddingBottom: Math.max(insets.bottom + 30, 30) 
+      }]}>
+        
 
+        {/* Solo Admin → Inventario */}
+        {mostrarSalir && (
+          <TouchableOpacity style={styles.mainButton} onPress={handleAhorros}>
+            <IconSymbol name="cube.box.fill" size={28} color="#FF8C00" />
+            <ThemedText style={styles.mainButtonText}>Ahorros</ThemedText>
+          </TouchableOpacity>
+        )}
+
+        {/* Solo Admin → Reportes */}
+        {esAdmin && (
+          <TouchableOpacity style={styles.mainButton} onPress={handleCocina}>
+            <IconSymbol name="flame.fill" size={28} color="#FF8C00" />
+            <ThemedText style={styles.mainButtonText}>Cocina</ThemedText>
+          </TouchableOpacity>
+        )}
+      </ThemedView>
       {/* Botones de navegación */}
       <ThemedView style={[styles.mainButtonsContainer, { 
         paddingBottom: Math.max(insets.bottom + 30, 30) 
@@ -109,6 +131,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
       </ThemedView>
+      
       
       
       

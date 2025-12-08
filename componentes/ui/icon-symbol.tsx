@@ -48,7 +48,7 @@ const MAPPING = {
   'flame.fill': 'local-fire-department',
   'motorcycle.fill': 'motorcycle',
   'bag.fill': 'shopping-bag',
-  
+  'cube.box.fill': 'savings',
    
   
 } as IconMapping;

@@ -15,15 +15,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 function getVisibilityFlags(rolId: number | null) {
   switch (rolId) {
     case 1:
-      return { home: true, pedidos: true, cocina: true, inventario: true, reportes: true, caja: false ,domicilios: false , ordenesGenerales: false};
+      return { home: true, pedidos: true, cocina: true, inventario: true, reportes: true, caja: false ,domicilios: false , ordenesGenerales: false, ahorros: false};
     case 2:
-      return { home: true, pedidos: true, cocina: false, inventario: false, reportes: false, caja: false ,domicilios: false , ordenesGenerales: false};
+      return { home: true, pedidos: true, cocina: false, inventario: false, reportes: false, caja: false ,domicilios: false , ordenesGenerales: false, ahorros: false};
     case 3:
-      return { home: false, pedidos: false, cocina: false, inventario: false, reportes: false, caja: false ,domicilios: false , ordenesGenerales: false};
+      return { home: false, pedidos: false, cocina: false, inventario: false, reportes: false, caja: false ,domicilios: false , ordenesGenerales: false, ahorros: false};
     case 4:
-      return { home: true, pedidos: true, cocina: true, inventario: true, reportes: false, caja: true ,domicilios: false , ordenesGenerales: false};
+      return { home: true, pedidos: true, cocina: true, inventario: true, reportes: false, caja: true ,domicilios: false , ordenesGenerales: false, ahorros: false};
     default:
-      return { home: true, pedidos: true, cocina: true, inventario: true, reportes: false, caja: true ,domicilios: false , ordenesGenerales: false};
+      return { home: true, pedidos: true, cocina: true, inventario: true, reportes: false, caja: true ,domicilios: false , ordenesGenerales: false, ahorros: false};
   }
 }
 
@@ -131,6 +131,15 @@ export default function TabLayout() {
         options={{
           title: 'Pedidos Generales',
           href: vis.ordenesGenerales ? undefined : null,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="creditcard.fill" color={color} />,
+          
+        }}
+      />
+      <Tabs.Screen
+        name="ahorrosScreen"
+        options={{
+          title: 'ahorros',
+          href: vis.ahorros ? undefined : null,
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="creditcard.fill" color={color} />,
         }}
       />
