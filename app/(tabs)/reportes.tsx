@@ -4,11 +4,11 @@ import { CalendarioRango } from '@/componentes/ui/CalendarioRango';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { supabase } from '@/scripts/lib/supabase';
 import { obtenerHistorialVentas, VentaCompleta } from '@/servicios-api/ventas';
-import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
+import { useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const extractErrorMessage = (error: unknown) => {
@@ -75,6 +75,15 @@ export default function ReportesScreen() {
   const [confirmacionVisible, setConfirmacionVisible] = useState(false);
   const [resumenVisible, setResumenVisible] = useState(false);
   const [montoAhorrar, setMontoAhorrar] = useState(0);
+  const [bolsillos, setBolsillos] = useState<any[]>([]);
+  const [asignacionesBolsillos, setAsignacionesBolsillos] = useState<Record<number, number>>({}); // bolsilloId -> monto
+  const [bolsilloEditando, setBolsilloEditando] = useState<number | null>(null);
+  const [montoTemporal, setMontoTemporal] = useState('');
+  const [creandoNuevoBolsillo, setCreandoNuevoBolsillo] = useState(false);
+  const [nombreNuevoBolsillo, setNombreNuevoBolsillo] = useState('');
+  const [mostrarAhorros, setMostrarAhorros] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [isDayFinalized, setIsDayFinalized] = useState(false); // Estado para controlar visualización de Caja en 0
   const insets = useSafeAreaInsets();
 
   const esHoyRange = useMemo(() => isTodayRange(rangoSeleccionado.inicioDia, rangoSeleccionado.finDia), [rangoSeleccionado]);
@@ -100,9 +109,6 @@ export default function ReportesScreen() {
         range.finDia.toISOString()
       );
 
-      if (ventasCargadas.length > 0) {
-      }
-
       setVentas(ventasCargadas);
     } catch (error) {
       const message = extractErrorMessage(error);
@@ -122,7 +128,6 @@ export default function ReportesScreen() {
         .select('*')
         .order('fecha', { ascending: false });
 
-      // Solo filtrar si se proporciona un rango
       if (range) {
         query = query
           .gte('fecha', range.inicioDia.toISOString())
@@ -150,23 +155,17 @@ export default function ReportesScreen() {
     const todayRange = getTodayRange();
     setRangoSeleccionado(todayRange);
     cargarVentas(todayRange);
-    cargarGastos(); // Cargar TODOS los gastos sin filtro por defecto
+    cargarGastos(todayRange);
     return () => {
       setRangoSeleccionado(getTodayRange());
     };
   }, [cargarVentas, cargarGastos]));
 
-  // Filtrar solo órdenes que fueron pagadas (tienen método de pago) - fallback local
   const ordenesPagadasFallback = ordenesEntregadas.filter(orden => orden.metodoPago);
-
-  // Convertir ventas de Supabase al formato de Orden para mostrar
   const ventasComoOrdenes: Orden[] = ventas.map(venta => {
-    // Convertir productos de VentaCompleta (ProductoVenta[]) al formato de string de Orden
     const productosFormateados = venta.productos.map(p => {
-      // Formato: "Producto (tamaño) $precio Xcantidad"
       return `${p.nombre} $${p.precioUnitario} X${p.cantidad}`;
     });
-
     return {
       id: venta.id,
       mesa: venta.mesa,
@@ -179,27 +178,53 @@ export default function ReportesScreen() {
       idVenta: venta.id_venta,
     };
   });
-
-  // Usar ventas de Supabase si hay, sino usar órdenes locales como fallback
   const ordenesParaMostrar = ventasComoOrdenes.length > 0 ? ventasComoOrdenes : ordenesPagadasFallback;
-
-  // Calcular ganancias totales (suma de todas las ventas de Supabase o del fallback local)
   const totalGanancias =
     ventas.length > 0
       ? ventas.reduce((total, venta) => total + (venta.total || 0), 0)
       : ordenesPagadasFallback.reduce((total, orden) => total + (orden.total || 0), 0);
-
-  // Total de gastos ya calculado en cargarGastos
-
-  // Calcular balance/utilidad
   const balance = totalGanancias - totalGastos;
-
-  // Calcular estadísticas básicas
   const totalOrdenesPagadas = ventas.length > 0 ? ventas.length : ordenesPagadasFallback.length;
   const totalOrdenes = ordenes.length + totalOrdenesPagadas;
   const ordenesCanceladas = ordenes.filter(o => o.estado === 'cancelado').length;
 
-  // Productos más pedidos (usa ventas cuando estén disponibles, sino fallback local)
+  /* Estado para creación diferida de bolsillos */
+  const [nuevosBolsillosTemporales, setNuevosBolsillosTemporales] = useState<{ id: string; nombre: string; saldo: number }[]>([]);
+
+  // Combinar bolsillos reales y temporales para renderizar
+  const todosBolsillos = useMemo(() => {
+    return [...bolsillos, ...nuevosBolsillosTemporales];
+  }, [bolsillos, nuevosBolsillosTemporales]);
+
+  // Cargar bolsillos cuando se abre el modal de resumen
+  useEffect(() => {
+    if (resumenVisible) {
+      cargarBolsillos();
+      // Limpiar asignaciones previas
+      setAsignacionesBolsillos({});
+      setBolsilloEditando(null);
+      setMontoTemporal('');
+      setCreandoNuevoBolsillo(false);
+      setNombreNuevoBolsillo('');
+      setNuevosBolsillosTemporales([]); // Resetear bolsillos temporales
+    }
+  }, [resumenVisible]);
+
+  const cargarBolsillos = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('bolsillos')
+        .select('id, nombre, saldo')
+        .neq('nombre', 'Ganancias') // Excluir Ganancias
+        .order('nombre');
+
+      if (error) throw error;
+      setBolsillos(data || []);
+    } catch (error) {
+      console.error('Error cargando bolsillos:', error);
+    }
+  };
+
   const productosParaContar = ventasComoOrdenes.length > 0 ? ventasComoOrdenes : ordenesEntregadas;
   const productosCount: Record<string, number> = {};
   productosParaContar.forEach(orden => {
@@ -212,7 +237,6 @@ export default function ReportesScreen() {
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5);
 
-  // Función para obtener información del método de pago
   const getMetodoPagoInfo = (metodoPago?: string) => {
     switch (metodoPago) {
       case 'daviplata':
@@ -239,8 +263,6 @@ export default function ReportesScreen() {
   );
 
   const renderProductoMasPedido = (producto: string, cantidad: number, index: number) => {
-    // Limpiar el nombre del producto (quitar precio y cantidad)
-    // Formato: "Pollo Asado (1/2) $20000 X4" → "Pollo Asado (1/2)"
     const nombreLimpio = producto.split(' $')[0].trim();
 
     return (
@@ -259,7 +281,6 @@ export default function ReportesScreen() {
     );
   };
 
-  // Toggle expandir/colapsar orden
   const toggleOrdenExpandida = (ordenId: string) => {
     setOrdenesExpandidas(prev => {
       const nuevaSet = new Set(prev);
@@ -272,10 +293,8 @@ export default function ReportesScreen() {
     });
   };
 
-  // Calcular total de una orden (fallback para órdenes antiguas)
   const calcularTotalOrden = (productos: string[]): number => {
     return productos.reduce((total, producto) => {
-      // Formato nuevo: "Producto (tamaño) $20000 X2"
       const precioMatch = producto.match(/\$(\d+)/);
       const cantidadMatch = producto.match(/X(\d+)/);
 
@@ -291,13 +310,11 @@ export default function ReportesScreen() {
 
   const renderOrdenEntregada = (orden: Orden) => {
     const isExpandida = ordenesExpandidas.has(orden.id);
-    // Usar total guardado o calcular si no existe (órdenes antiguas)
     const totalVenta = orden.total || calcularTotalOrden(orden.productos);
     const metodoPagoInfo = getMetodoPagoInfo(orden.metodoPago);
 
     return (
       <ThemedView key={orden.id} style={styles.ordenEntregadaCard}>
-        {/* Vista Compacta - Siempre visible */}
         <ThemedView style={styles.ordenCompacta}>
           <ThemedView style={styles.ordenCompactaRow}>
             <ThemedView style={styles.mesaBadge}>
@@ -305,7 +322,6 @@ export default function ReportesScreen() {
               <ThemedText style={styles.mesaBadgeTexto}>Mesa {orden.mesa}</ThemedText>
             </ThemedView>
 
-            {/* ID de Venta */}
             {orden.idVenta && (
               <ThemedText style={styles.idVentaTexto}>ID: {orden.idVenta}</ThemedText>
             )}
@@ -333,7 +349,6 @@ export default function ReportesScreen() {
           </ThemedView>
         </ThemedView>
 
-        {/* Botón Detalles */}
         <TouchableOpacity
           style={styles.detallesButton}
           onPress={() => toggleOrdenExpandida(orden.id)}
@@ -347,7 +362,6 @@ export default function ReportesScreen() {
           />
         </TouchableOpacity>
 
-        {/* Vista Expandida - Solo cuando está expandida */}
         {isExpandida && (
           <ThemedView style={styles.ordenExpandida}>
             <ThemedView style={styles.divider} />
@@ -355,13 +369,10 @@ export default function ReportesScreen() {
             <ThemedView style={styles.ordenProductos}>
               <ThemedText style={styles.ordenProductosTitulo}>Productos:</ThemedText>
               {orden.productos.map((producto, index) => {
-                // Separar cantidad si existe
                 const partes = producto.split(' X');
-                const productoConPrecio = partes[0]; // "Producto (tamaño) $20000"
+                const productoConPrecio = partes[0];
                 const cantidad = partes[1];
-
-                // Limpiar el nombre del producto (quitar precio)
-                const productoLimpio = productoConPrecio.split(' $')[0].trim(); // "Producto (tamaño)"
+                const productoLimpio = productoConPrecio.split(' $')[0].trim();
 
                 return (
                   <ThemedView key={`${orden.id}-prod-${index}`} style={styles.productoDetalleContainer}>
@@ -397,18 +408,209 @@ export default function ReportesScreen() {
     cargarGastos(nuevoRango);
   };
 
+
+  const handleGuardarGanancias = async () => {
+    try {
+      // Calcular total asignado
+      const totalAsignado = Object.values(asignacionesBolsillos).reduce((sum, monto) => sum + monto, 0);
+
+      // Validación: No se puede asignar más de lo que hay en caja
+      if (totalAsignado > balance) {
+        Alert.alert(
+          '❌ Mmm no te alcanza',
+          `Has asignado $${totalAsignado.toLocaleString('es-CO')} pero solo tienes $${balance.toLocaleString('es-CO')} en caja.`,
+          [{ text: 'Entendido', style: 'default' }]
+        );
+        return;
+      }
+
+      setGuardando(true);
+
+      // 1. Procesar Bolsillos Temporales (Crearlos en BD)
+      const mapaIdTemporalAReal: Record<string, string> = {}; // { temp_123: real_uuid }
+
+      for (const tempBolsillo of nuevosBolsillosTemporales) {
+        // Solo creamos el bolsillo si tiene fondos asignados
+        const montoAsignado = asignacionesBolsillos[tempBolsillo.id] || 0;
+
+        if (montoAsignado > 0) {
+          // Insertar en BD
+          const { data: nuevoBolsilloData, error: errorInsert } = await supabase
+            .from('bolsillos')
+            .insert([{ nombre: tempBolsillo.nombre, saldo: 0 }]) // Saldo inicial 0, se le suma luego
+            .select()
+            .single();
+
+          if (errorInsert) throw errorInsert;
+
+          if (nuevoBolsilloData) {
+            mapaIdTemporalAReal[tempBolsillo.id] = nuevoBolsilloData.id;
+          }
+        }
+      }
+
+      // 2. Procesar cada asignación (existentes y nuevos)
+      for (const [bolsilloIdStr, monto] of Object.entries(asignacionesBolsillos)) {
+        if (monto <= 0) continue;
+
+        let bolsilloIdReal: number | null = null;
+
+        // Verificar si es ID temporal
+        if (bolsilloIdStr.startsWith('temp_')) {
+          const idRealStr = mapaIdTemporalAReal[bolsilloIdStr];
+          if (idRealStr) {
+            bolsilloIdReal = parseInt(idRealStr); // Asumiendo que el ID de Supabase es numeric/int8. 
+            // Si es UUID, usar string. En pios-pizza parece ser int4/int8 por el parseInt original.
+            // El código original usaba parseInt(bolsilloIdStr).
+            // Si el nuevo ID viene de supabase insert, será number.
+          }
+        } else {
+          bolsilloIdReal = parseInt(bolsilloIdStr);
+        }
+
+        if (!bolsilloIdReal) continue; // Si no se pudo resolver el ID, saltar.
+
+        // Obtener saldo actual actualizado para seguridad
+        const { data: bData, error: bError } = await supabase
+          .from('bolsillos')
+          .select('saldo')
+          .eq('id', bolsilloIdReal)
+          .single();
+
+        if (bError && !bError.message.includes('No rows')) throw bError;
+        const saldoActual = bData ? bData.saldo : 0;
+
+        // Actualizar saldo del bolsillo
+        const nuevoSaldo = saldoActual + monto;
+        const { error: errorUpdate } = await supabase
+          .from('bolsillos')
+          .update({ saldo: nuevoSaldo })
+          .eq('id', bolsilloIdReal);
+
+        if (errorUpdate) throw errorUpdate;
+
+        // Registrar transacción
+        await supabase.from('bolsillos_transacciones').insert([{
+          bolsillo_id: bolsilloIdReal,
+          monto: monto,
+          concepto: 'Ahorro Cierre de Día'
+        }]);
+      }
+
+      // calcular remanente y finalizar
+      const remanente = balance - totalAsignado;
+      const fechaHoy = new Date().toLocaleDateString('es-ES');
+
+      if (remanente > 0) {
+        // Buscar o crear bolsillo "Ganancias"
+        const { data: bolsilloGanancias, error: fetchError } = await supabase
+          .from('bolsillos')
+          .select('*')
+          .eq('nombre', 'Ganancias')
+          .single();
+
+        let gananciasBolsilloId: number;
+
+        if (fetchError || !bolsilloGanancias) {
+          // Crear bolsillo "Ganancias" si no existe
+          const { data: nuevoBolsillo, error: createError } = await supabase
+            .from('bolsillos')
+            .insert([{ nombre: 'Ganancias', saldo: 0 }])
+            .select()
+            .single();
+
+          if (createError) throw createError;
+          gananciasBolsilloId = nuevoBolsillo!.id;
+        } else {
+          gananciasBolsilloId = bolsilloGanancias.id;
+        }
+
+        // Obtener saldo actual y actualizar
+        const { data: bolsilloActual } = await supabase
+          .from('bolsillos')
+          .select('saldo')
+          .eq('id', gananciasBolsilloId)
+          .single();
+
+        const saldoActual = bolsilloActual ? bolsilloActual.saldo : 0;
+
+        await supabase
+          .from('bolsillos')
+          .update({ saldo: saldoActual + remanente })
+          .eq('id', gananciasBolsilloId);
+
+        // Registrar transacción
+        await supabase.from('bolsillos_transacciones').insert([{
+          bolsillo_id: gananciasBolsilloId,
+          monto: remanente,
+          concepto: `Ganancias día ${fechaHoy}`
+        }]);
+      }
+
+      // Limpiar estados
+      setResumenVisible(false);
+      setAsignacionesBolsillos({});
+      setBolsilloEditando(null);
+      setMontoTemporal('');
+      setCreandoNuevoBolsillo(false);
+      setNombreNuevoBolsillo('');
+      setNuevosBolsillosTemporales([]);
+
+      // Recargar ventas y gastos para actualizar Caja a 0
+      await cargarVentas(rangoSeleccionado);
+      await cargarGastos(rangoSeleccionado);
+      setIsDayFinalized(true); // Marcar como finalizado para mostrar Caja en 0
+
+      Alert.alert('✅ Éxito', 'Día finalizado correctamente.');
+
+    } catch (error) {
+      console.error('Error al guardar ganancias:', error);
+      Alert.alert('Error', 'Hubo un problema al guardar los datos.');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+
   const handleFinalizarDia = () => {
     setConfirmacionVisible(false);
     setResumenVisible(true);
   };
 
+
+
+
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
       <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 60, 60) }]}>
-        <ThemedText type="title" style={styles.title}>
-          Reportes
-        </ThemedText>
+        <ThemedView style={styles.headerTitleContainer}>
+          <ThemedText type="title" style={styles.title}>
+            Reportes
+          </ThemedText>
+          {esHoyRange && (
+            <TouchableOpacity
+              style={[styles.powerButton, (balance <= 0 || isDayFinalized) && { opacity: 0.5, borderColor: '#CCC' }]}
+              onPress={() => {
+                if (balance <= 0 || isDayFinalized) {
+                  Alert.alert(
+                    'No disponible',
+                    'No hay saldo en caja para finalizar o el día ya ha sido cerrado.'
+                  );
+                  return;
+                }
+                setConfirmacionVisible(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <IconSymbol
+                name="power.circle.fill"
+                size={22}
+                color={(balance <= 0 || isDayFinalized) ? "#CCC" : "#D32F2F"}
+              />
+            </TouchableOpacity>
+          )}
+        </ThemedView>
         <ThemedView style={styles.dateRow}>
           <TouchableOpacity style={styles.dateButton} onPress={() => setCalendarioVisible(true)}>
             <IconSymbol name="calendar" size={20} color="#8B4513" />
@@ -485,14 +687,14 @@ export default function ReportesScreen() {
             </ThemedView>
           </TouchableOpacity>
 
-          {/* Tarjeta de Balance/Utilidad */}
+          {/* Tarjeta de Caja */}
           <ThemedView style={styles.tarjetaBalance}>
             <ThemedView style={styles.tarjetaHeader}>
               <IconSymbol name="chart.line.uptrend.xyaxis" size={30} color="#FF8C00" />
-              <ThemedText style={styles.tarjetaTituloBalance}>Balance</ThemedText>
+              <ThemedText style={styles.tarjetaTituloBalance}>Caja</ThemedText>
             </ThemedView>
             <ThemedText style={styles.tarjetaValorBalance}>
-              ${balance.toLocaleString('es-CO')}
+              ${(isDayFinalized ? 0 : balance).toLocaleString('es-CO')}
             </ThemedText>
             <ThemedView style={styles.balanceBarra}>
               <ThemedView style={[styles.barraGanancias, { width: totalGastos === 0 ? '100%' : `${(totalGanancias / (totalGanancias + totalGastos)) * 100}%` }]} />
@@ -571,18 +773,7 @@ export default function ReportesScreen() {
           )}
         </ThemedView>
 
-        {/* Botón Finalizar Día */}
-        {esHoyRange && (
-          <ThemedView style={styles.section}>
-            <TouchableOpacity
-              style={styles.finalizarDiaButton}
-              onPress={() => setConfirmacionVisible(true)}
-            >
-              <IconSymbol name="moon.stars.fill" size={24} color="#fff" />
-              <ThemedText style={styles.finalizarDiaTexto}>Finalizar Día</ThemedText>
-            </TouchableOpacity>
-          </ThemedView>
-        )}
+
       </ScrollView>
 
       {/* Modal de Confirmación */}
@@ -621,98 +812,408 @@ export default function ReportesScreen() {
       <Modal
         visible={resumenVisible}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setResumenVisible(false)}
       >
-        <ThemedView style={styles.modalOverlay}>
-          <ThemedView style={styles.resumenModal}>
-            <ThemedView style={styles.resumenHeader}>
-              <IconSymbol name="star.fill" size={40} color="#FFD700" />
-              <ThemedText style={styles.resumenTitulo}>Resumen del Día</ThemedText>
-              <ThemedText style={styles.resumenFecha}>
-                {new Date().toLocaleDateString('es-ES', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-              </ThemedText>
-            </ThemedView>
-
-            <ThemedView style={styles.resumenContenido}>
-              <ThemedView style={styles.resumenItem}>
-                <IconSymbol name="arrow.up.circle.fill" size={32} color="#28A745" />
-                <ThemedView style={styles.resumenItemInfo}>
-                  <ThemedText style={styles.resumenItemLabel}>Ventas Totales</ThemedText>
-                  <ThemedText style={styles.resumenItemValor}>
-                    ${totalGanancias.toLocaleString('es-CO')}
-                  </ThemedText>
-                </ThemedView>
-              </ThemedView>
-
-              <ThemedView style={styles.resumenItem}>
-                <IconSymbol name="arrow.down.circle.fill" size={32} color="#DC3545" />
-                <ThemedView style={styles.resumenItemInfo}>
-                  <ThemedText style={styles.resumenItemLabel}>Gastos Totales</ThemedText>
-                  <ThemedText style={styles.resumenItemValor}>
-                    ${totalGastos.toLocaleString('es-CO')}
-                  </ThemedText>
-                </ThemedView>
-              </ThemedView>
-
-              <ThemedView style={styles.resumenDivider} />
-
-              <ThemedView style={styles.resumenBalance}>
-                <ThemedText style={styles.resumenBalanceLabel}>Balance Final</ThemedText>
-                <ThemedText style={styles.resumenBalanceValor}>
-                  ${(balance - montoAhorrar).toLocaleString('es-CO')}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <ThemedView style={styles.modalOverlay}>
+            <ThemedView style={styles.resumenModal}>
+              <ThemedView style={styles.resumenHeaderCompact}>
+                <IconSymbol name="star.fill" size={24} color="#FFD700" />
+                <ThemedText style={styles.resumenTituloCompact}>Resumen del Día</ThemedText>
+                <ThemedText style={styles.resumenFechaCompact}>
+                  {new Date().toLocaleDateString('es-ES', {
+                    weekday: 'short', day: 'numeric', month: 'long'
+                  })}
                 </ThemedText>
               </ThemedView>
 
-              <ThemedView style={styles.ahorroContainer}>
-                <ThemedText style={styles.ahorroLabel}>¿Cuánto deseas ahorrar?</ThemedText>
-                <TextInput
-                  style={styles.ahorroInput}
-                  placeholder="$0"
-                  keyboardType="numeric"
-                  value={montoAhorrar > 0 ? montoAhorrar.toString() : ''}
-                  onChangeText={(text) => {
-                    const monto = parseInt(text.replace(/[^0-9]/g, '')) || 0;
-                    setMontoAhorrar(monto);
-                  }}
-                />
-                {montoAhorrar > 0 && (
-                  <ThemedText style={styles.balanceFinalTexto}>
-                    Balance después de ahorrar: ${(balance - montoAhorrar).toLocaleString('es-CO')}
-                  </ThemedText>
-                )}
-              </ThemedView>
-            </ThemedView>
+              <ScrollView
+                style={styles.resumenDashboard}
+                contentContainerStyle={{ paddingBottom: 20 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Caja Section - Prominent */}
+                <ThemedView style={styles.balanceSection}>
+                  <ThemedText style={styles.balanceLabel}>CAJA TOTAL</ThemedText>
+                  <View style={styles.balanceValueContainer}>
+                    <CountUp value={balance} prefix='$' color='#F57F17' delay={1600} />
+                  </View>
+                </ThemedView>
 
-            <TouchableOpacity
-              style={styles.cerrarResumenButton}
-              onPress={() => {
-                setResumenVisible(false);
-                setMontoAhorrar(0);
-              }}
-            >
-              <ThemedText style={styles.cerrarResumenTexto}>Cerrar</ThemedText>
-            </TouchableOpacity>
+                {/* Stats Grid */}
+                <ThemedView style={styles.statsGrid}>
+                  <ThemedView style={[styles.statCard, { backgroundColor: '#E8F5E9' }]}>
+                    <IconSymbol name="arrow.up.circle.fill" size={24} color="#28A745" />
+                    <ThemedText style={[styles.statLabel, { color: '#1B5E20' }]}>Ventas</ThemedText>
+                    <View style={styles.statValueCompact}>
+                      <CountUp value={totalGanancias} prefix='$' color='#2E7D32' delay={0} />
+                    </View>
+                  </ThemedView>
+
+                  <ThemedView style={[styles.statCard, { backgroundColor: '#FFEBEE' }]}>
+                    <IconSymbol name="arrow.down.circle.fill" size={24} color="#DC3545" />
+                    <ThemedText style={[styles.statLabel, { color: '#B71C1C' }]}>Gastos</ThemedText>
+                    <View style={styles.statValueCompact}>
+                      <CountUp value={totalGastos} prefix='$' color='#C62828' delay={800} />
+                    </View>
+                  </ThemedView>
+                </ThemedView>
+
+                {/* Pocket Allocation Section */}
+                {/* Pocket Allocation Section */}
+                <View style={styles.ahorroSection}>
+                  {/* Botón Acordeón AHORRAR */}
+                  <TouchableOpacity
+                    style={styles.ahorrarAccordionButton}
+                    onPress={() => setMostrarAhorros(!mostrarAhorros)}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <IconSymbol name="cube.box.fill" size={28} color="#FFF" />
+                      <ThemedText style={styles.ahorrarButtonText}>AHORRAR</ThemedText>
+                    </View>
+                    <IconSymbol
+                      name={mostrarAhorros ? "chevron.up" : "chevron.down"}
+                      size={24}
+                      color="#FFF"
+                    />
+                  </TouchableOpacity>
+
+                  {/* Sección Desplegable de Ahorros */}
+                  {mostrarAhorros && (
+                    <View style={styles.ahorroSectionContent}>
+
+                      {/* Balance Disponible */}
+                      <ThemedView style={styles.balanceDisponibleContainer}>
+                        <ThemedText style={styles.balanceDisponibleLabel}>DISPONIBLE A REPARTIR</ThemedText>
+                        <View style={styles.disponibleValueWrapper}>
+                          <ThemedText style={styles.balanceDisponibleValor}>
+                            ${(balance - Object.values(asignacionesBolsillos).reduce((sum, m) => sum + m, 0)).toLocaleString('es-CO')}
+                          </ThemedText>
+                          {/* Indicador visual animado */}
+                          <View style={styles.pulseIndicator} />
+                        </View>
+                      </ThemedView>
+
+                      {/* Lista de Bolsillos (Reales + Temporales) */}
+                      {todosBolsillos.map(bolsillo => {
+                        const montoAsignado = asignacionesBolsillos[bolsillo.id] || 0;
+                        const estaEditando = bolsilloEditando === bolsillo.id;
+                        const isChecked = montoAsignado > 0;
+
+                        return (
+                          <ThemedView key={bolsillo.id} style={styles.bolsilloItem}>
+                            <View style={[styles.bolsilloRow, isChecked && styles.bolsilloRowActive]}>
+
+                              {/* Info Bolsillo (Izquierda) */}
+                              <TouchableOpacity
+                                style={styles.bolsilloInfo}
+                                onPress={() => {
+                                  if (!isChecked) {
+                                    setBolsilloEditando(bolsillo.id);
+                                    setMontoTemporal('');
+                                  }
+                                }}
+                              >
+                                <ThemedText style={styles.bolsilloNombreText}>{bolsillo.nombre}</ThemedText>
+                                <ThemedText style={styles.bolsilloSaldoText}>
+                                  En bolsillo: ${bolsillo.saldo.toLocaleString('es-CO')}
+                                </ThemedText>
+                              </TouchableOpacity>
+
+                              {/* Contenedor Derecho: Input/Monto + Checkbox */}
+                              <View style={styles.bolsilloRightContainer}>
+
+                                {/* Si está asignado, mostrar monto */}
+                                {isChecked && (
+                                  <ThemedText style={styles.montoAsignadoText}>
+                                    +${montoAsignado.toLocaleString('es-CO')}
+                                  </ThemedText>
+                                )}
+
+                                {estaEditando && (
+                                  <View style={styles.moneyInputWrapper}>
+                                    <ThemedText style={styles.currencySymbol}>$</ThemedText>
+                                    <TextInput
+                                      style={styles.montoInputCompact}
+                                      placeholder="0"
+                                      placeholderTextColor="#999"
+                                      keyboardType="numeric"
+                                      value={montoTemporal}
+                                      onChangeText={(text) => {
+                                        const rawValue = text.replace(/[^0-9]/g, '');
+                                        if (rawValue === '') {
+                                          setMontoTemporal('');
+                                          return;
+                                        }
+                                        const formatted = parseInt(rawValue).toLocaleString('es-CO');
+                                        setMontoTemporal(formatted);
+                                      }}
+                                      autoFocus
+                                      returnKeyType="done"
+                                      onSubmitEditing={() => {
+                                        const cleanValue = montoTemporal.replace(/\./g, '');
+                                        const monto = parseInt(cleanValue) || 0;
+
+                                        if (monto <= 0) {
+                                          setBolsilloEditando(null);
+                                          return;
+                                        }
+                                        const totalActual = Object.values(asignacionesBolsillos).reduce((sum, m) => sum + m, 0);
+                                        if (totalActual + monto > balance) {
+                                          Alert.alert('❌ No alcanza', 'Saldo insuficiente.');
+                                          return;
+                                        }
+                                        setAsignacionesBolsillos({ ...asignacionesBolsillos, [bolsillo.id]: monto });
+                                        setBolsilloEditando(null);
+                                        setMontoTemporal('');
+                                      }}
+                                    />
+                                  </View>
+                                )}
+
+                                {/* Checkbox (Siempre a la derecha) */}
+                                <TouchableOpacity
+                                  style={styles.checkboxContainer}
+                                  onPress={() => {
+                                    if (isChecked) {
+                                      // Desmarcar
+                                      const nuevas = { ...asignacionesBolsillos };
+                                      delete nuevas[bolsillo.id];
+                                      setAsignacionesBolsillos(nuevas);
+                                      setBolsilloEditando(null);
+                                    } else {
+                                      if (!estaEditando) {
+                                        // Activar edición
+                                        setBolsilloEditando(bolsillo.id);
+                                        setMontoTemporal('');
+                                      } else {
+                                        // CONFIRMAR GUARDADO (Logic Checkmark)
+                                        const cleanValue = montoTemporal.replace(/\./g, '');
+                                        const monto = parseInt(cleanValue) || 0;
+
+                                        if (monto <= 0) {
+                                          setBolsilloEditando(null);
+                                          return;
+                                        }
+                                        const totalActual = Object.values(asignacionesBolsillos).reduce((sum, m) => sum + m, 0);
+                                        if (totalActual + monto > balance) {
+                                          Alert.alert('❌ No alcanza', 'Saldo insuficiente.');
+                                          return;
+                                        }
+                                        setAsignacionesBolsillos({ ...asignacionesBolsillos, [bolsillo.id]: monto });
+                                        setBolsilloEditando(null);
+                                        setMontoTemporal('');
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <IconSymbol
+                                    name={isChecked ? "checkmark.square.fill" : "square"}
+                                    size={30}
+                                    color={isChecked ? "#28A745" : (estaEditando ? "#3498DB" : "#CCC")}
+                                  />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          </ThemedView>
+                        );
+                      })}
+
+                      {/* Lógica Crear Nuevo Bolsillo */}
+                      {!creandoNuevoBolsillo ? (
+                        <TouchableOpacity
+                          style={styles.crearBolsilloButton}
+                          onPress={() => {
+                            setCreandoNuevoBolsillo(true);
+                            setNombreNuevoBolsillo('');
+                            setMontoTemporal('');
+                          }}
+                        >
+                          <IconSymbol name="plus.circle.fill" size={20} color="#555" />
+                          <ThemedText style={styles.crearBolsilloText}>Crear nuevo bolsillo</ThemedText>
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.crearBolsilloContainer}>
+                          <ThemedText style={styles.crearBolsilloLabel}>Nuevo Bolsillo:</ThemedText>
+
+                          {/* Paso 1: Nombre */}
+                          <TextInput
+                            style={styles.nuevoBolsilloInput}
+                            placeholder="Nombre del bolsillo"
+                            placeholderTextColor="#999"
+                            value={nombreNuevoBolsillo}
+                            onChangeText={setNombreNuevoBolsillo}
+                            autoFocus
+                          />
+
+                          {/* Paso 2: Monto (aparece si hay nombre) */}
+                          {nombreNuevoBolsillo.length > 0 && (
+                            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+                              <View style={[styles.moneyInputWrapper, { flex: 1, width: 'auto' }]}>
+                                <ThemedText style={styles.currencySymbol}>$</ThemedText>
+                                <TextInput
+                                  style={styles.montoInputCompact}
+                                  placeholder="Monto inicial"
+                                  placeholderTextColor="#999"
+                                  keyboardType="numeric"
+                                  value={montoTemporal}
+                                  onChangeText={(text) => {
+                                    const rawValue = text.replace(/[^0-9]/g, '');
+                                    if (rawValue === '') {
+                                      setMontoTemporal('');
+                                      return;
+                                    }
+                                    const formatted = parseInt(rawValue).toLocaleString('es-CO');
+                                    setMontoTemporal(formatted);
+                                  }}
+                                />
+                              </View>
+                              <TouchableOpacity
+                                style={styles.checkButton}
+                                onPress={() => {
+                                  if (!nombreNuevoBolsillo.trim()) return;
+                                  const cleanValue = montoTemporal.replace(/\./g, '');
+                                  const monto = parseInt(cleanValue) || 0;
+
+                                  // Validar balance
+                                  const totalActual = Object.values(asignacionesBolsillos).reduce((sum, m) => sum + m, 0);
+                                  if (totalActual + monto > balance) {
+                                    Alert.alert('❌ No alcanza', 'No tienes suficiente saldo disponible.');
+                                    return;
+                                  }
+
+                                  // CREACIÓN DIFERIDA: Solo local
+                                  const tempId = 'temp_' + Date.now();
+                                  const nuevoBolsilloTemp = {
+                                    id: tempId,
+                                    nombre: nombreNuevoBolsillo,
+                                    saldo: 0
+                                  };
+
+                                  setNuevosBolsillosTemporales(prev => [...prev, nuevoBolsilloTemp]);
+
+                                  if (monto > 0) {
+                                    setAsignacionesBolsillos(prev => ({
+                                      ...prev,
+                                      [tempId]: monto
+                                    }));
+                                  }
+
+                                  // Resetear form
+                                  setCreandoNuevoBolsillo(false);
+                                  setNombreNuevoBolsillo('');
+                                  setMontoTemporal('');
+                                }}
+                              >
+                                <IconSymbol name="checkmark.circle.fill" size={32} color="#28A745" />
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                          <TouchableOpacity
+                            onPress={() => setCreandoNuevoBolsillo(false)}
+                            style={{ alignSelf: 'flex-end', marginTop: 8 }}
+                          >
+                            <ThemedText style={{ color: '#999', fontSize: 12 }}>Cancelar</ThemedText>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.finalizarButton, guardando && { opacity: 0.7 }]}
+                  onPress={() => handleGuardarGanancias()}
+                  disabled={guardando}
+                >
+                  <ThemedText style={styles.finalizarButtonText}>
+                    {guardando ? 'Guardando...' : 'Finalizar y Guardar'}
+                  </ThemedText>
+                  {!guardando && <IconSymbol name="checkmark.circle.fill" size={20} color="#fff" />}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.cancelarResumenButton}
+                  onPress={() => {
+                    setResumenVisible(false);
+                    setMontoAhorrar(0);
+                  }}
+                >
+                  <ThemedText style={styles.cancelarResumenText}>Cancelar</ThemedText>
+                </TouchableOpacity>
+              </ScrollView>
+            </ThemedView>
           </ThemedView>
-        </ThemedView>
-      </Modal>
+        </KeyboardAvoidingView>
+      </Modal >
 
       {/* Modal de Calendario */}
-      <CalendarioRango
+      < CalendarioRango
         visible={calendarioVisible}
-        onClose={() => setCalendarioVisible(false)}
+        onClose={() => setCalendarioVisible(false)
+        }
         onSelectRange={handleAplicarRango}
         fechaInicio={rangoSeleccionado.inicioDia}
         fechaFin={rangoSeleccionado.finDia}
       />
-    </ThemedView>
+    </ThemedView >
   );
 }
+
+
+
+
+// Componente de animación CountUp independiente con soporte para delay
+const CountUp = ({ value, prefix = '', color = '#8B4513', delay = 0 }: { value: number; prefix?: string; color?: string; delay?: number }) => {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    let start = 0;
+    const end = value;
+    if (start === end) {
+      setDisplayValue(end);
+      return;
+    }
+
+    const duration = 1500;
+    // Iniciamos la animación después del delay
+    const timeoutId = setTimeout(() => {
+      const startTime = performance.now();
+      let animationFrameId: number;
+
+      const animate = (currentTime: number) => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Easing: easeOutExpo
+        const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+
+        const current = Math.round(start + (end - start) * ease);
+        setDisplayValue(current);
+
+        if (progress < 1) {
+          animationFrameId = requestAnimationFrame(animate);
+        }
+      };
+
+      animationFrameId = requestAnimationFrame(animate);
+    }, delay);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [value, delay]);
+
+  return (
+    <ThemedText style={{ fontSize: 24, fontWeight: 'bold', color: color }}>
+      {prefix}{displayValue.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+    </ThemedText>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -725,6 +1226,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingBottom: 20,
+  },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  powerButton: {
+    padding: 4,
+    backgroundColor: '#FFF',
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#D32F2F',
+    shadowColor: '#D32F2F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   title: {
     fontSize: 28,
@@ -1146,18 +1664,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  // Estilos para el botón "Finalizar Día"
   finalizarDiaButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    backgroundColor: '#DC143C', // Rojo carmesí vibrante
+    backgroundColor: '#DC143C',
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: '#FF6B6B', // Borde rojo más claro para efecto de brillo
+    borderColor: '#FF6B6B',
     elevation: 6,
     shadowColor: '#DC143C',
     shadowOffset: { width: 0, height: 3 },
@@ -1172,14 +1689,12 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
-  // Estilos para modales
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Modal de confirmación
   confirmacionModal: {
     backgroundColor: '#fff',
     borderRadius: 20,
@@ -1239,131 +1754,401 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  // Modal de resumen
   resumenModal: {
     backgroundColor: '#fff',
     borderRadius: 24,
-    padding: 24,
+    padding: 20,
     width: '90%',
-    maxWidth: 450,
-    maxHeight: '85%',
-    elevation: 5,
+    maxWidth: 400,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
   },
-  resumenHeader: {
-    alignItems: 'center',
-    marginBottom: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: '#FFD700',
-  },
-  resumenTitulo: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#8B4513',
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  resumenFecha: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    textTransform: 'capitalize',
-  },
-  resumenContenido: {
-    marginBottom: 20,
-  },
-  resumenItem: {
+  resumenHeaderCompact: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
-  resumenItemInfo: {
-    flex: 1,
-  },
-  resumenItemLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  resumenItemValor: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#8B4513',
-  },
-  resumenDivider: {
-    height: 2,
-    backgroundColor: '#e0e0e0',
-    marginVertical: 16,
-  },
-  resumenBalance: {
-    backgroundColor: '#FFF8E1',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#FF8C00',
-  },
-  resumenBalanceLabel: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 8,
-  },
-  resumenBalanceValor: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FF8C00',
-  },
-  ahorroContainer: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  ahorroLabel: {
-    fontSize: 15,
-    color: '#8B4513',
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  ahorroInput: {
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#FF8C00',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+  resumenTituloCompact: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#8B4513',
-    textAlign: 'center',
+    color: '#333',
   },
-  balanceFinalTexto: {
+  resumenFechaCompact: {
     fontSize: 14,
     color: '#666',
-    marginTop: 12,
-    textAlign: 'center',
+    textTransform: 'capitalize',
+    borderLeftWidth: 1,
+    borderLeftColor: '#ccc',
+    paddingLeft: 8,
+    marginLeft: 4,
+  },
+  resumenDashboard: {
+    gap: 16,
+  },
+  balanceSection: {
+    alignItems: 'center',
+    backgroundColor: '#FFF8E1',
+    paddingVertical: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FFD54F',
+    marginBottom: 4,
+  },
+  balanceLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#F57F17',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  balanceValueContainer: {
+    transform: [{ scale: 1.2 }],
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 16,
+    alignItems: 'center',
+    gap: 6,
+  },
+  statLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  statValueCompact: {
+    transform: [{ scale: 0.9 }],
+  },
+  statValueText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  ahorroSection: {
+    marginTop: 8,
+    // Eliminado fondo y padding para limpieza visual
+  },
+  ahorroInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    height: 44,
+  },
+  ahorroInputCompact: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  balanceRestanteText: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 6,
+    textAlign: 'right',
     fontStyle: 'italic',
   },
-  cerrarResumenButton: {
-    backgroundColor: '#8B4513',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 8,
+  bolsilloSelectorLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 12,
+    marginBottom: 8,
   },
-  cerrarResumenTexto: {
+  bolsillosScroll: {
+    marginBottom: 12,
+  },
+  bolsilloChip: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginRight: 8,
+    borderWidth: 1.5,
+    borderColor: '#DDD',
+    minWidth: 100,
+  },
+  bolsilloChipSelected: {
+    backgroundColor: '#FF8C00',
+    borderColor: '#FF8C00',
+  },
+  bolsilloChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+  },
+  bolsilloChipTextSelected: {
+    color: '#FFF',
+  },
+  bolsilloChipSaldo: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 2,
+  },
+  bolsilloChipSaldoSelected: {
+    color: '#FFE0B2',
+  },
+  bolsilloChipNuevo: {
+    backgroundColor: '#FFF3E0',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: '#FF8C00',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  bolsilloChipNuevoText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FF8C00',
+  },
+
+  finalizarButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FF8C00',
+    paddingVertical: 14,
+    borderRadius: 16,
+    marginTop: 20,
+    elevation: 4,
+    shadowColor: '#FF8C00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  finalizarButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  cancelarResumenButton: {
+    marginTop: 12,
+    alignItems: 'center',
+    padding: 8,
+  },
+  balanceDisponibleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#E8F6F3', // Mint/Teal light suave
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 20,
+    borderWidth: 1.5,
+    borderColor: '#1ABC9C', // Borde Teal vibrante
+    elevation: 2,
+    shadowColor: '#16A085',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  disponibleValueWrapper: {
+    alignItems: 'flex-end',
+  },
+  pulseIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#1ABC9C', // Led Teal
+    marginTop: 4,
+  },
+  bolsilloRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F8F8',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    padding: 4, // Padding externo para el row
+    gap: 8,
+  },
+  bolsilloRowActive: {
+    backgroundColor: '#FFF8E1',
+    borderColor: '#FFC107',
+    borderWidth: 1.5,
+  },
+  checkboxContainer: {
+    padding: 12,
+  },
+  bolsilloInfo: {
+    flex: 1,
+    paddingVertical: 12,
+  },
+  crearBolsilloContainer: {
+    backgroundColor: '#FFF',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FF8C00',
+    marginTop: 8,
+    gap: 12,
+  },
+  crearBolsilloLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FF8C00',
+  },
+  nuevoBolsilloInput: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    fontSize: 16,
+  },
+  balanceDisponibleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  balanceDisponibleValor: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF8C00',
+  },
+  bolsilloItem: {
+    marginBottom: 12,
+  },
+  bolsilloNombre: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F8F8F8',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  bolsilloNombreConAsignacion: {
+    backgroundColor: '#FFF5E6',
+    borderColor: '#FF8C00',
+    borderWidth: 2,
+  },
+  bolsilloNombreText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+  },
+  bolsilloSaldoText: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 4,
+  },
+  montoAsignadoText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FF8C00',
+  },
+  inputConCheckContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
+  },
+  montoInput: {
+    flex: 1,
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#333',
+  },
+  checkButton: {
+    padding: 4,
+  },
+  crearBolsilloButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#F8F8F8', // Gris claro (Igual a bolsilloRow)
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0', // Borde gris suave
+    // borderStyle: 'solid', // Default
+    marginTop: 8,
+  },
+  crearBolsilloText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333', // Texto oscuro estándar
+  },
+  cancelarResumenText: {
+    color: '#999',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  ahorrarAccordionButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#3498DB', // Dodger Blue (Azul Claro Vibrante)
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    elevation: 4,
+    shadowColor: '#2980B9',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+  ahorrarButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFF',
+  },
+  ahorroSectionContent: {
+    marginBottom: 16,
+  },
+  bolsilloRightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  moneyInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    width: 110,
+  },
+  currencySymbol: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginRight: 4,
+  },
+  montoInputCompact: {
+    flex: 1,
+    padding: 0, // Remove default padding
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
   },
 });

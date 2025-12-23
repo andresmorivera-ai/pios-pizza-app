@@ -48,9 +48,16 @@ const MAPPING = {
   'flame.fill': 'local-fire-department',
   'motorcycle.fill': 'motorcycle',
   'bag.fill': 'shopping-bag',
+  'square': 'check-box-outline-blank',
+  'checkmark.square.fill': 'check-box',
   'cube.box.fill': 'savings',
-   
-  
+  'power.circle.fill': 'power-settings-new',
+  'arrow.up.circle.fill': 'arrow-circle-up',
+  'arrow.down.circle.fill': 'arrow-circle-down',
+  'banknote.fill': 'attach-money',
+  'arrow.down.forward': 'subdirectory-arrow-right',
+  'moon.stars.fill': 'nightlight-round',
+
 } as IconMapping;
 
 /**

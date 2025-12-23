@@ -430,123 +430,121 @@ export default function DetallesCobroScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            {/* Imagen del método de pago */}
-            {metodoActual && (
-              <View style={styles.modalImageContainer}>
-                <Image source={metodoActual.imagen} style={styles.modalImagen} />
-              </View>
-            )}
-
-            {/* Título */}
-            <ThemedText style={styles.modalTitulo}>
-              {metodoActual?.nombre}
-            </ThemedText>
-
-            {/* Mensaje específico según el método */}
-            {metodoActual?.id === 'daviplata' && (
-              <View style={styles.modalContent}>
-                <ThemedText style={styles.modalSubtitulo}>Número de Daviplata:</ThemedText>
-                <ThemedText style={styles.modalNumero}>300-123-4567</ThemedText>
-                <ThemedText style={styles.modalInstruccion}>
-                  Recibe el pago en tu cuenta Daviplata y confirma cuando esté listo.
-                </ThemedText>
-              </View>
-            )}
-
-            {metodoActual?.id === 'nequi' && (
-              <View style={styles.modalContent}>
-                <ThemedText style={styles.modalSubtitulo}>Número de Nequi:</ThemedText>
-                <ThemedText style={styles.modalNumero}>300-987-6543</ThemedText>
-                <ThemedText style={styles.modalInstruccion}>
-                  Recibe el pago en tu cuenta Nequi y confirma cuando esté listo.
-                </ThemedText>
-              </View>
-            )}
-
-            {metodoActual?.id === 'tarjeta' && (
-              <View style={styles.modalContent}>
-                <ThemedText style={styles.modalSubtitulo}>💡 Instrucciones:</ThemedText>
-                <ThemedText style={styles.modalPaso}>1. Ingresa el valor <ThemedText style={styles.modalPasoValor}>${total.toLocaleString()}</ThemedText> en el datáfono</ThemedText>
-                <ThemedText style={styles.modalPaso}>2. Pasa la tarjeta del cliente</ThemedText>
-                <ThemedText style={styles.modalPaso}>3. Espera la aprobación</ThemedText>
-                <ThemedText style={styles.modalPaso}>4. Confirma cuando esté listo</ThemedText>
-              </View>
-            )}
-
-            {metodoActual?.id === 'efectivo' && (
-              <View style={styles.modalContent}>
-                <ThemedText style={styles.modalSubtitulo}>💰 Cálculo de Vueltas</ThemedText>
-
-                {/* Total de la cuenta */}
-                <View style={styles.efectivoTotalContainer}>
-                  <ThemedText style={styles.efectivoLabel}>Total a pagar:</ThemedText>
-                  <ThemedText style={styles.efectivoTotal}>${total.toLocaleString()}</ThemedText>
+            <ScrollView
+              style={{ width: '100%', maxHeight: '85%' }}
+              contentContainerStyle={{ paddingBottom: 10 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {/* Imagen del método de pago */}
+              {metodoActual && (
+                <View style={styles.modalImageContainer}>
+                  <Image source={metodoActual.imagen} style={styles.modalImagen} />
                 </View>
+              )}
 
-                {/* Campo para monto recibido */}
-                <View style={styles.efectivoInputContainer}>
-                  <ThemedText style={styles.efectivoLabel}>¿Cuánto dio el cliente?</ThemedText>
-                  <TextInput
-                    style={styles.efectivoInput}
-                    value={montoRecibido}
-                    onChangeText={handleMontoChange}
-                    placeholder="0"
-                    keyboardType="numeric"
-                    placeholderTextColor="#999"
-                  />
+              {/* Título */}
+              <ThemedText style={styles.modalTitulo}>
+                {metodoActual?.nombre}
+              </ThemedText>
+
+              {/* Mensaje específico según el método */}
+              {metodoActual?.id === 'daviplata' && (
+                <View style={styles.modalContent}>
+                  <ThemedText style={styles.modalSubtitulo}>Número de Daviplata:</ThemedText>
+                  <ThemedText style={styles.modalNumero}>300-123-4567</ThemedText>
+                  <ThemedText style={styles.modalInstruccion}>
+                    Recibe el pago en tu cuenta Daviplata y confirma cuando esté listo.
+                  </ThemedText>
                 </View>
+              )}
 
-                {/* Botones de billetes */}
-                <View style={styles.billetesContainer}>
-                  <ThemedText style={styles.billetesTitulo}>Billetes:</ThemedText>
-                  <View style={styles.billetesGrid}>
-                    <TouchableOpacity style={styles.billeteButton} onPress={() => agregarBillete(2000)}>
-                      <ThemedText style={styles.billeteText}>$2,000</ThemedText>
-                      <ThemedText style={styles.billeteCount}>x{billetesCount[2000]}</ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.billeteButton} onPress={() => agregarBillete(5000)}>
-                      <ThemedText style={styles.billeteText}>$5,000</ThemedText>
-                      <ThemedText style={styles.billeteCount}>x{billetesCount[5000]}</ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.billeteButton} onPress={() => agregarBillete(10000)}>
-                      <ThemedText style={styles.billeteText}>$10,000</ThemedText>
-                      <ThemedText style={styles.billeteCount}>x{billetesCount[10000]}</ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.billeteButton} onPress={() => agregarBillete(20000)}>
-                      <ThemedText style={styles.billeteText}>$20,000</ThemedText>
-                      <ThemedText style={styles.billeteCount}>x{billetesCount[20000]}</ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.billeteButton} onPress={() => agregarBillete(50000)}>
-                      <ThemedText style={styles.billeteText}>$50,000</ThemedText>
-                      <ThemedText style={styles.billeteCount}>x{billetesCount[50000]}</ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.billeteButton} onPress={() => agregarBillete(100000)}>
-                      <ThemedText style={styles.billeteText}>$100,000</ThemedText>
-                      <ThemedText style={styles.billeteCount}>x{billetesCount[100000]}</ThemedText>
-                    </TouchableOpacity>
-                  </View>
+              {metodoActual?.id === 'nequi' && (
+                <View style={styles.modalContent}>
+                  <ThemedText style={styles.modalSubtitulo}>Número de Nequi:</ThemedText>
+                  <ThemedText style={styles.modalNumero}>300-987-6543</ThemedText>
+                  <ThemedText style={styles.modalInstruccion}>
+                    Recibe el pago en tu cuenta Nequi y confirma cuando esté listo.
+                  </ThemedText>
                 </View>
+              )}
 
-                {/* Resultado de vueltas */}
-                {vueltasCalculadas > 0 && (
-                  <View style={styles.vueltasContainer}>
-                    <View style={styles.vueltasHeader}>
-                      <IconSymbol name="arrow.left" size={20} color="#2031a8" />
-                      <ThemedText style={styles.vueltasLabel}>Vueltas a dar:</ThemedText>
+              {metodoActual?.id === 'tarjeta' && (
+                <View style={styles.modalContent}>
+                  <ThemedText style={styles.modalSubtitulo}>💡 Instrucciones:</ThemedText>
+                  <ThemedText style={styles.modalPaso}>1. Ingresa el valor <ThemedText style={styles.modalPasoValor}>${total.toLocaleString()}</ThemedText> en el datáfono</ThemedText>
+                  <ThemedText style={styles.modalPaso}>2. Pasa la tarjeta del cliente</ThemedText>
+                  <ThemedText style={styles.modalPaso}>3. Espera la aprobación</ThemedText>
+                  <ThemedText style={styles.modalPaso}>4. Confirma cuando esté listo</ThemedText>
+                </View>
+              )}
+
+              {metodoActual?.id === 'efectivo' && (
+                <View style={styles.modalContent}>
+                  {/* Fila compacta: Total y Input Side-by-Side */}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, gap: 10 }}>
+                    <View style={{ flex: 1, backgroundColor: '#E8F5E9', padding: 15, borderRadius: 12, alignItems: 'center', borderWidth: 2, borderColor: '#32CD32' }}>
+                      <ThemedText style={{ fontSize: 16, color: '#2E7D32', fontWeight: 'bold' }}>Total a Pagar:</ThemedText>
+                      <ThemedText style={{ fontSize: 28, fontWeight: 'bold', color: '#1B5E20', marginTop: 4 }}>${total.toLocaleString()}</ThemedText>
                     </View>
-                    <ThemedText style={styles.vueltasValor}>${vueltasCalculadas.toLocaleString()}</ThemedText>
-                  </View>
-                )}
 
-                {parseFloat(montoRecibido.replace(/[^0-9]/g, '') || '0') < total && montoRecibido !== '' && (
-                  <View style={styles.faltaContainer}>
-                    <ThemedText style={styles.faltaText}>⚠️ Falta: ${(total - parseFloat(montoRecibido.replace(/[^0-9]/g, ''))).toLocaleString()}</ThemedText>
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                      <ThemedText style={{ fontSize: 14, color: '#8B4513', fontWeight: 'bold', marginBottom: 5 }}>Recibido:</ThemedText>
+                      <TextInput
+                        style={{
+                          width: '100%', borderWidth: 2, borderColor: '#ddd', borderRadius: 10,
+                          padding: 8, fontSize: 18, fontWeight: 'bold', textAlign: 'center', backgroundColor: '#fff'
+                        }}
+                        value={montoRecibido}
+                        onChangeText={handleMontoChange}
+                        placeholder="0"
+                        keyboardType="numeric"
+                        placeholderTextColor="#999"
+                      />
+                    </View>
                   </View>
-                )}
-              </View>
-            )}
 
-            {/* Botones */}
+                  {/* Resultados Compactos */}
+                  {(vueltasCalculadas > 0 || (parseFloat(montoRecibido.replace(/[^0-9]/g, '') || '0') < total && montoRecibido !== '')) && (
+                    <View style={{ marginBottom: 15 }}>
+                      {vueltasCalculadas > 0 && (
+                        <View style={{ backgroundColor: '#dff5f4', padding: 10, borderRadius: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <ThemedText style={{ fontSize: 16, fontWeight: 'bold', color: '#2031a8' }}>Vueltas:</ThemedText>
+                          <ThemedText style={{ fontSize: 22, fontWeight: 'bold', color: '#0b0f2b' }}>${vueltasCalculadas.toLocaleString()}</ThemedText>
+                        </View>
+                      )}
+
+                      {parseFloat(montoRecibido.replace(/[^0-9]/g, '') || '0') < total && montoRecibido !== '' && (
+                        <View style={{ backgroundColor: '#FFE8E8', padding: 8, borderRadius: 10, alignItems: 'center' }}>
+                          <ThemedText style={{ fontSize: 16, fontWeight: 'bold', color: '#D32F2F' }}>Falta: ${(total - parseFloat(montoRecibido.replace(/[^0-9]/g, ''))).toLocaleString()}</ThemedText>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Grid de Billetes Compacto */}
+                  <View style={{ marginBottom: 5 }}>
+                    <View style={styles.billetesGrid}>
+                      {[2000, 5000, 10000, 20000, 50000, 100000].map((valor) => (
+                        <TouchableOpacity
+                          key={valor}
+                          style={styles.billeteButton}
+                          onPress={() => agregarBillete(valor)}
+                        >
+                          <ThemedText style={styles.billeteText}>${(valor / 1000)}k</ThemedText>
+                          {billetesCount[valor as keyof typeof billetesCount] > 0 && (
+                            <View style={{ position: 'absolute', top: -5, right: -5, backgroundColor: 'red', borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center' }}>
+                              <ThemedText style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{billetesCount[valor as keyof typeof billetesCount]}</ThemedText>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Botones Fijos al pie */}
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.modalButtonCancelar}
@@ -559,7 +557,7 @@ export default function DetallesCobroScreen() {
                 style={styles.modalButtonConfirmar}
                 onPress={handleConfirmarModal}
               >
-                <ThemedText style={styles.modalButtonTextConfirmar}>Confirmar Pago</ThemedText>
+                <ThemedText style={styles.modalButtonTextConfirmar}>Confirmar</ThemedText>
               </TouchableOpacity>
             </View>
           </View>
@@ -851,26 +849,27 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
+    maxHeight: '85%', // Prevent full screen takeover
   },
   modalImageContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: Layout.borderRadius.xxl,
+    width: 60,
+    height: 60,
+    borderRadius: Layout.borderRadius.xl,
     backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: Layout.spacing.l,
+    marginBottom: Layout.spacing.s,
   },
   modalImagen: {
-    width: 80,
-    height: 80,
+    width: 40,
+    height: 40,
     resizeMode: 'contain',
   },
   modalTitulo: {
-    fontSize: Layout.fontSize.xxl,
+    fontSize: Layout.fontSize.xl,
     fontWeight: 'bold',
     color: '#8B4513',
-    marginBottom: Layout.spacing.l,
+    marginBottom: Layout.spacing.m,
     textAlign: 'center',
   },
   modalContent: {
@@ -986,20 +985,24 @@ const styles = StyleSheet.create({
   billetesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Layout.spacing.s,
+    justifyContent: 'space-between',
   },
   billeteButton: {
     backgroundColor: '#FF8C00',
-    paddingVertical: Layout.spacing.s,
-    paddingHorizontal: Layout.spacing.m,
+    paddingVertical: Layout.spacing.m,
+    paddingHorizontal: Layout.spacing.xs,
     borderRadius: Layout.borderRadius.m,
-    minWidth: '30%',
+    width: '31%',
     alignItems: 'center',
-    marginBottom: Layout.spacing.s,
+    justifyContent: 'center',
+    marginBottom: Layout.spacing.m,
+    elevation: 3,
+    minHeight: 50,
+    overflow: 'visible',
   },
   billeteText: {
     color: '#fff',
-    fontSize: Layout.fontSize.m,
+    fontSize: Layout.fontSize.l,
     fontWeight: 'bold',
   },
   billeteCount: {

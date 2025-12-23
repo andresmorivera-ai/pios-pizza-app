@@ -76,7 +76,11 @@ export default function GastosScreen() {
     };
 
     const cargarBolsillos = async () => {
-        const { data, error } = await supabase.from('bolsillos').select('id, nombre, saldo').order('nombre');
+        const { data, error } = await supabase
+            .from('bolsillos')
+            .select('id, nombre, saldo')
+            .neq('nombre', 'Ganancias') // Excluir Ganancias
+            .order('nombre');
         if (data) setBolsillos(data as any[]); // Tipado rápido
     };
 
@@ -97,34 +101,39 @@ export default function GastosScreen() {
             return;
         }
 
-        // Calcular saldo actual de los ya seleccionados
-        const saldoActualSeleccionado = selectedBolsilloIds.reduce((sum, pId) => {
-            const b = bolsillos.find(x => x.id === pId);
-            return sum + (b?.saldo || 0);
-        }, 0);
-
-        // Si con lo que ya tengo + el nuevo ME PASO o LLEGO, genial. 
-        // Pero la regla del usuario: "si gasto es mayor... mensaje... deja elegir 2"
-
-        // Lógica simplificada:
-        // Si no hay nada seleccionado:
+        // Caso 2: No hay nada seleccionado aún (primera selección)
         if (selectedBolsilloIds.length === 0) {
+            // Si este bolsillo tiene suficiente saldo para cubrir todo el gasto
             if (bolsillo.saldo >= montoGasto) {
-                // Alcanza con uno solo -> Selección única
+                // ✅ Alcanza con uno solo - Bloquear multi-selección
                 setSelectedBolsilloIds([id]);
             } else {
-                // No alcanza -> Selección única + Alerta + Modo múltiple iniciado (implícito)
+                // ❌ No alcanza - Permitir multi-selección
                 setSelectedBolsilloIds([id]);
                 Alert.alert(
                     'Saldo Insuficiente',
-                    `En "${bolsillo.nombre}" tienes $${bolsillo.saldo.toLocaleString('es-CO')}. Te faltan $${(montoGasto - bolsillo.saldo).toLocaleString('es-CO')}.\n\nSelecciona otros bolsillos para completar.`
+                    `"${bolsillo.nombre}" tiene $${bolsillo.saldo.toLocaleString('es-CO')}.\nTe faltan $${(montoGasto - bolsillo.saldo).toLocaleString('es-CO')}.\n\n✅ Ahora puedes seleccionar otros bolsillos.`
                 );
             }
-        } else {
-            // Ya hay selección (estamos en modo múltiple o completando)
-            // Simplemente agregamos el nuevo
-            setSelectedBolsilloIds(prev => [...prev, id]);
+            return;
         }
+
+        // Caso 3: Ya hay bolsillos seleccionados
+        // Verificar si el primer bolsillo seleccionado tenía suficiente saldo
+        const primerBolsilloId = selectedBolsilloIds[0];
+        const primerBolsillo = bolsillos.find(b => b.id === primerBolsilloId);
+
+        if (primerBolsillo && primerBolsillo.saldo >= montoGasto) {
+            // ❌ El primer bolsillo tiene suficiente - NO permitir más selecciones
+            Alert.alert(
+                '⚠️ No necesitas más bolsillos',
+                `"${primerBolsillo.nombre}" tiene suficiente saldo ($${primerBolsillo.saldo.toLocaleString('es-CO')}) para cubrir el gasto de $${montoGasto.toLocaleString('es-CO')}.\n\nNo puedes seleccionar más bolsillos.`
+            );
+            return;
+        }
+
+        // ✅ El primer bolsillo NO tiene suficiente - Permitir agregar más
+        setSelectedBolsilloIds(prev => [...prev, id]);
     };
 
     const agregarGasto = async () => {

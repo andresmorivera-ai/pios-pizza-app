@@ -2,6 +2,7 @@ import { ThemedText } from '@/componentes/themed-text';
 import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { useAuth } from '@/utilidades/context/AuthContext';
+import { useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
 
 import { router } from 'expo-router';
@@ -19,7 +20,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const { usuario, logout } = useAuth();
+  const { ordenes } = useOrdenes();
   const insets = useSafeAreaInsets();
+
+  const hayOrdenesPorCobrar = ordenes.length > 0;
 
   // Animation values
   const scale = useSharedValue(1);
@@ -47,7 +51,7 @@ export default function HomeScreen() {
   //  Acciones
   const handleStartOrder = () => router.push('/(tabs)/seleccionar-mesa');
   const handleAhorros = () => router.push('/(tabs)/ahorrosScreen');
-  const handleCocina = () => router.push('/(tabs)/CocinaScreen');
+  const handleGastos = () => router.push('/gastos');
   const handleCobrar = () => {
     router.push('/cobrar');
   };
@@ -95,14 +99,16 @@ export default function HomeScreen() {
 
         {/* Botón Cobrar - Solo para Admin */}
         {mostrarSalir && (
-          <TouchableOpacity style={styles.cobrarButton} onPress={handleCobrar}>
-            <Image
-              source={require('../../assets/iconocobrar.png')}
-              style={styles.cobrarIcon}
-              resizeMode="contain"
-            />
-            <ThemedText style={styles.cobrarText}>Cobrar</ThemedText>
-          </TouchableOpacity>
+          <Animated.View style={hayOrdenesPorCobrar ? animatedStyle : undefined}>
+            <TouchableOpacity style={styles.cobrarButton} onPress={handleCobrar}>
+              <Image
+                source={require('../../assets/iconocobrar.png')}
+                style={styles.cobrarIcon}
+                resizeMode="contain"
+              />
+              <ThemedText style={styles.cobrarText}>Cobrar</ThemedText>
+            </TouchableOpacity>
+          </Animated.View>
         )}
       </ThemedView>
 
@@ -111,24 +117,26 @@ export default function HomeScreen() {
         paddingBottom: Math.max(insets.bottom + 30, 30)
       }]}>
 
-        {/* Solo Admin → Ahorros (ANIMADO) */}
+        {/* Solo Admin → Ahorros (SIN ANIMACIÓN) */}
         {mostrarSalir && (
-          <Animated.View style={[animatedStyle]}>
-            <TouchableOpacity
-              style={[styles.mainButton, styles.savingsButton]}
-              onPress={handleAhorros}
-            >
-              <IconSymbol name="cube.box.fill" size={32} color="#FFF" />
-              <ThemedText style={styles.savingsButtonText}>Ahorros</ThemedText>
-            </TouchableOpacity>
-          </Animated.View>
+          <TouchableOpacity
+            style={[styles.mainButton, styles.savingsButton]}
+            onPress={handleAhorros}
+          >
+            <IconSymbol name="cube.box.fill" size={32} color="#FFF" />
+            <ThemedText style={styles.savingsButtonText}>Ahorros</ThemedText>
+          </TouchableOpacity>
         )}
 
-        {/* Solo Admin → Cocina */}
+        {/* Solo Admin → Gastos (REDSEÑADO) */}
         {esAdmin && (
-          <TouchableOpacity style={styles.mainButton} onPress={handleCocina}>
-            <IconSymbol name="flame.fill" size={28} color="#FF8C00" />
-            <ThemedText style={styles.mainButtonText}>Cocina</ThemedText>
+          <TouchableOpacity
+            style={[styles.mainButton, styles.gastosButton]}
+            onPress={handleGastos}
+            activeOpacity={0.8}
+          >
+            <IconSymbol name="cart.fill" size={32} color="#FFF" />
+            <ThemedText style={styles.gastosButtonText}>Gastos</ThemedText>
           </TouchableOpacity>
         )}
       </ThemedView>
@@ -261,7 +269,24 @@ const styles = StyleSheet.create({
     color: '#FFF',
     textAlign: 'center',
   },
-  mainButtonText: {
+  // --- BOTÓN GASTOS (ESTILO AHORROS - ROJO) ---
+  gastosButton: {
+    backgroundColor: '#E53935', // Rojo vibrante pero elegante
+    elevation: 10,
+    shadowColor: '#E53935',
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  gastosButtonText: {
+    marginTop: 8,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFF',
+    textAlign: 'center',
+  },
+  mainButtonText: { // Fallback for other buttons
     marginTop: 8,
     fontSize: 16,
     fontWeight: '600',

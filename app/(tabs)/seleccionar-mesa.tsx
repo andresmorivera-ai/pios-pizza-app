@@ -154,6 +154,9 @@ export default function SeleccionarMesaScreen() {
       })
       .subscribe();
 
+    // ⚠️ Deshabilitado para evitar race conditions con OrdenesContext
+    // El contexto ya actualiza la mesa directamente
+    /*
     const canalOrdenes = supabase
       .channel('ordenes-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes' }, async (payload) => {
@@ -166,10 +169,11 @@ export default function SeleccionarMesaScreen() {
         }
       })
       .subscribe();
+    */
 
     return () => {
       supabase.removeChannel(canalMesas);
-      supabase.removeChannel(canalOrdenes);
+      // supabase.removeChannel(canalOrdenes);
     };
   }, []);
 
@@ -293,6 +297,14 @@ export default function SeleccionarMesaScreen() {
               <ThemedView style={[styles.colorBox, { backgroundColor: '#28A745' }]} />
               <ThemedText style={styles.leyendaTexto}>Pagado</ThemedText>
             </ThemedView>
+          </ThemedView>
+
+          <ThemedView style={styles.leyendaRow}>
+            <ThemedView style={styles.leyendaItem}>
+              <ThemedView style={[styles.colorBox, { backgroundColor: '#D84315' }]} />
+              <ThemedText style={styles.leyendaTexto}>Por Pagar</ThemedText>
+            </ThemedView>
+            <ThemedView style={styles.leyendaItem} />
           </ThemedView>
 
         </ThemedView>

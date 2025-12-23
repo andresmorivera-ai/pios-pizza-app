@@ -564,9 +564,10 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // 1. Actualizar estado local a 'pago' (sin eliminar aún) y MANTENER en la lista visualmente
       setOrdenes(prev => {
-        const nuevas = prev.filter(orden => String(orden.id) !== idString);
-        guardarOrdenesEnStorage(nuevas);
+        const nuevas = prev.map(o => String(o.id) === idString ? { ...o, estado: 'pago' as const } : o);
+        // guardarOrdenesEnStorage filtrará los pagos, pero en memoria los mantenemos 5s
         return nuevas;
       });
 
@@ -580,6 +581,7 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
 
       setOrdenesEntregadas(prev => [...prev, ordenPagada]);
 
+      // 2. Actualizar BD Orden a 'pago'
       const { error } = await supabase
         .from('ordenes')
         .update({
@@ -593,10 +595,27 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
         logError('Error actualizando orden a pago en Supabase', error);
       }
 
+      // 3. Actualizar BD Mesa a 'pago' (para que se vea verde/pagado)
       await supabase
         .from('mesas')
-        .update({ estado: 'disponible' })
+        .update({ estado: 'pago' })
         .eq('numero_mesa', ordenAPagar.mesa);
+
+      // 4. Esperar 5 segundos y limpiar
+      setTimeout(async () => {
+        // Limpiar de estado local
+        setOrdenes(prev => {
+          const nuevas = prev.filter(orden => String(orden.id) !== idString);
+          guardarOrdenesEnStorage(nuevas);
+          return nuevas;
+        });
+
+        // Liberar mesa en BD
+        await supabase
+          .from('mesas')
+          .update({ estado: 'disponible' })
+          .eq('numero_mesa', ordenAPagar.mesa);
+      }, 5000);
 
     } catch (error) {
       console.error('❌ Error en procesarPago:', error);
@@ -644,11 +663,33 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
 
         setOrdenesEntregadas((prevEntregadas) => [...prevEntregadas, ordenActualizada]);
 
+        // Mantener visualmente como pago por 5s
         setOrdenes((prev) => {
-          const sinPago = prev.filter((orden) => orden.id !== id);
-          guardarOrdenesEnStorage(sinPago);
-          return sinPago;
+          return prev.map(o => o.id === id ? { ...o, estado: 'pago' } : o);
         });
+
+        // 1. Actualizar mesa a PAGO inmediatamente
+        await supabase
+          .from('mesas')
+          .update({ estado: 'pago' })
+          .eq('numero_mesa', ordenAActualizar.mesa);
+
+        // 2. Timeout para limpiar
+        setTimeout(async () => {
+          setOrdenes((prev) => {
+            const sinPago = prev.filter((orden) => orden.id !== id);
+            guardarOrdenesEnStorage(sinPago);
+            return sinPago;
+          });
+
+          // Liberar mesa
+          await supabase
+            .from('mesas')
+            .update({ estado: 'disponible' })
+            .eq('numero_mesa', ordenAActualizar.mesa);
+
+        }, 5000);
+
       } else {
         setOrdenes((prev) => {
           const nuevas = prev.map((orden) => {
@@ -703,14 +744,7 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
           guardarOrdenesEnStorage(nuevas);
           return nuevas;
         });
-      }
 
-      if (nuevoEstado === 'pago') {
-        await supabase
-          .from('mesas')
-          .update({ estado: 'disponible' })
-          .eq('numero_mesa', ordenAActualizar.mesa);
-      } else {
         await supabase
           .from('mesas')
           .update({ estado: nuevoEstado })

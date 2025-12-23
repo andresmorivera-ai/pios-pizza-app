@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
  * @param value El número a formatear (puede ser string o number).
  * @returns El string formateado.
  */
-const formatCOP = (value: number | string): string => {
+const formatCOP = (value: number | string, decimals: number = 2): string => {
     // Asegura que es un número (o 0 si no es válido)
     const num = typeof value === 'string' ? parseFloat(value) : value;
     if (isNaN(num)) return '$0';
@@ -26,8 +26,8 @@ const formatCOP = (value: number | string): string => {
     return new Intl.NumberFormat('es-CO', {
         style: 'currency',
         currency: 'COP',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
     }).format(num);
 };
 
@@ -181,10 +181,20 @@ export default function AhorrosScreen() {
     const [isGlobalHistoryVisible, setGlobalHistoryVisible] = useState(false);
     const [globalTransactions, setGlobalTransactions] = useState<any[]>([]);
 
-    // Super Total
-    const superTotal = useMemo(() => {
-        return bolsillos.reduce((sum, pocket) => sum + (pocket.saldo || 0), 0);
+    // Filtrar bolsillo "Ganancias" para mostrarlo de manera especial
+    const bolsilloGanancias = useMemo(() => {
+        return bolsillos.find(b => b.nombre === 'Ganancias');
     }, [bolsillos]);
+
+    // Bolsillos normales (sin "Ganancias")
+    const bolsillosNormales = useMemo(() => {
+        return bolsillos.filter(b => b.nombre !== 'Ganancias');
+    }, [bolsillos]);
+
+    // CALCULO SUPER TOTAL (SOLO BOLSILLOS NORMALES - SIN GANANCIAS)
+    const superTotal = useMemo(() => {
+        return bolsillosNormales.reduce((acc, bolsillo) => acc + bolsillo.saldo, 0);
+    }, [bolsillosNormales]);
 
     // Lógica de BackHandler (SIN CAMBIOS)
     useFocusEffect(
@@ -694,7 +704,7 @@ export default function AhorrosScreen() {
 
                 <ThemedView style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <ThemedText style={styles.pocketBalance} type="subtitle">
-                        {formatCOP(bolsillo.saldo)}
+                        {formatCOP(bolsillo.saldo, 0)}
                     </ThemedText>
                     <IconSymbol name="chevron.right" size={20} color="#CCC" style={{ marginLeft: 10 }} />
                 </ThemedView>
@@ -707,13 +717,28 @@ export default function AhorrosScreen() {
         <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
             <ThemedText type="title" style={styles.header}>Vista de Ahorros Independiente</ThemedText>
 
-            {/*  Super Total Display */}
+            {/*  Super Total Display con Ganancias Integradas */}
             <ThemedView style={styles.totalContainer}>
                 <ThemedText style={styles.totalLabel} type="default">SUPER TOTAL GENERAL</ThemedText>
                 <ThemedText style={styles.totalAmount} type="title">
-                    {/* Aplicar formatCOP al total */}
-                    {formatCOP(superTotal)}
+                    {formatCOP(superTotal, 0)}
                 </ThemedText>
+
+                {/* Ganancias Integradas - Compactas */}
+                {bolsilloGanancias && (
+                    <TouchableOpacity
+                        style={styles.gananciasIntegrada}
+                        onPress={() => openPocketDetail(bolsilloGanancias)}
+                        activeOpacity={0.7}
+                    >
+                        <IconSymbol name="star.fill" size={18} color="#FFB900" />
+                        <ThemedText style={styles.gananciasLabelCompact}>Ganancias Acumuladas:</ThemedText>
+                        <ThemedText style={styles.gananciasAmountCompact}>
+                            {formatCOP(bolsilloGanancias.saldo, 0)}
+                        </ThemedText>
+                        <IconSymbol name="chevron.right" size={16} color="#D17A00" />
+                    </TouchableOpacity>
+                )}
             </ThemedView>
 
             {/* Lista de Bolsillos (SIN CAMBIOS) */}
@@ -741,7 +766,7 @@ export default function AhorrosScreen() {
                             <IconSymbol name="list.bullet.rectangle.fill" size={20} color="#555" />
                             <ThemedText style={{ marginLeft: 8, color: '#333', fontWeight: 'bold' }}>Ver Movimientos (Gastos)</ThemedText>
                         </TouchableOpacity>
-                        {bolsillos.map((bolsillo) => (
+                        {bolsillosNormales.map((bolsillo) => (
                             <BolsilloCard key={bolsillo.id} bolsillo={bolsillo} />
                         ))}
                     </ThemedView>
@@ -777,7 +802,7 @@ export default function AhorrosScreen() {
 
                         <ThemedText style={styles.pickerLabel} type="default">
                             {/* Aplicar formatCOP para el saldo actual */}
-                            Saldo Actual: **{formatCOP(activePocketForTransaction.saldo)}**
+                            Saldo Actual: **{formatCOP(activePocketForTransaction.saldo, 0)}**
                         </ThemedText>
 
                         {/* Input para el monto, con formato visual */}
@@ -834,7 +859,6 @@ export default function AhorrosScreen() {
                         overflow: 'hidden'
                     }}>
 
-                        {/* HEADER DE ACCIONES: Volver y Eliminar */}
                         <ThemedView style={{
                             flexDirection: 'row',
                             justifyContent: 'space-between',
@@ -848,8 +872,8 @@ export default function AhorrosScreen() {
                                 <IconSymbol name="xmark.circle.fill" size={30} color="#CCC" />
                             </TouchableOpacity>
 
-                            {/* Solo mostrar eliminar si NO estamos creando */}
-                            {!isCreatingPocket && (
+                            {/* Solo mostrar eliminar si NO estamos creando Y NO es Ganancias */}
+                            {!isCreatingPocket && selectedPocket?.nombre !== 'Ganancias' && (
                                 <TouchableOpacity onPress={deletePocket} style={{ padding: 5 }}>
                                     <IconSymbol name="trash" size={28} color="#FF3B30" />
                                 </TouchableOpacity>
@@ -887,58 +911,87 @@ export default function AhorrosScreen() {
 
 
                             {/* 2. FORMULARIO DE EDICIÓN / CREACIÓN */}
-                            <ThemedText type="subtitle" style={{ marginBottom: 20, color: '#333' }}>
-                                {isCreatingPocket ? 'Detalles del Nuevo Bolsillo' : 'Editar Detalles'}
-                            </ThemedText>
+                            {/* Solo mostrar si NO es Ganancias (Read-only para Ganancias) */}
+                            {selectedPocket?.nombre !== 'Ganancias' && (
+                                <>
+                                    <ThemedText type="subtitle" style={{ marginBottom: 20, color: '#333' }}>
+                                        {isCreatingPocket ? 'Detalles del Nuevo Bolsillo' : 'Editar Detalles'}
+                                    </ThemedText>
 
-                            {/* Input Nombre */}
-                            <ThemedText style={{ marginBottom: 8, color: '#666', fontWeight: '600' }}>Nombre del Bolsillo</ThemedText>
-                            <TextInput
-                                style={[styles.input, { backgroundColor: '#FFF', borderColor: '#E5E5EA' }]}
-                                placeholder="Ej: Viaje, Ahorros"
-                                value={editingPocketName}
-                                onChangeText={setEditingPocketName}
-                                maxLength={30}
-                            />
+                                    {/* Input Nombre */}
+                                    <ThemedText style={{ marginBottom: 8, color: '#666', fontWeight: '600' }}>Nombre del Bolsillo</ThemedText>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: '#FFF', borderColor: '#E5E5EA' }]}
+                                        placeholder="Ej: Viaje, Ahorros"
+                                        value={editingPocketName}
+                                        onChangeText={setEditingPocketName}
+                                        maxLength={30}
+                                    />
 
-                            {/* Input Saldo */}
-                            <ThemedText style={{ marginBottom: 8, color: '#666', fontWeight: '600' }}>
-                                {isCreatingPocket ? 'Monto Inicial' : '¿Cuánto vas a dejar?'}
-                            </ThemedText>
-                            <ThemedView style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                backgroundColor: '#FFF',
-                                borderWidth: 1,
-                                borderColor: '#E5E5EA',
-                                borderRadius: 12,
-                                paddingHorizontal: 15,
-                                marginBottom: 10
-                            }}>
-                                <ThemedText style={{ fontSize: 24, fontWeight: 'bold', color: '#333' }}>$</ThemedText>
-                                <TextInput
-                                    style={{ flex: 1, fontSize: 24, fontWeight: 'bold', padding: 15, color: '#333' }}
-                                    placeholder="0"
-                                    value={editingPocketBalance}
-                                    onChangeText={(text) => {
-                                        const numericValue = text.replace(/[^0-9]/g, '');
-                                        if (!numericValue) {
-                                            setEditingPocketBalance('');
-                                            return;
+                                    {/* Input Saldo */}
+                                    <ThemedText style={{ marginBottom: 8, color: '#666', fontWeight: '600' }}>
+                                        {isCreatingPocket ? 'Monto Inicial' : '¿Cuánto vas a dejar?'}
+                                    </ThemedText>
+                                    <ThemedView style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        backgroundColor: '#FFF',
+                                        borderWidth: 1,
+                                        borderColor: '#E5E5EA',
+                                        borderRadius: 12,
+                                        paddingHorizontal: 15,
+                                        marginBottom: 10
+                                    }}>
+                                        <ThemedText style={{ fontSize: 24, fontWeight: 'bold', color: '#333' }}>$</ThemedText>
+                                        <TextInput
+                                            style={{ flex: 1, fontSize: 24, fontWeight: 'bold', padding: 15, color: '#333' }}
+                                            placeholder="0"
+                                            value={editingPocketBalance}
+                                            onChangeText={(text) => {
+                                                const numericValue = text.replace(/[^0-9]/g, '');
+                                                if (!numericValue) {
+                                                    setEditingPocketBalance('');
+                                                } else {
+                                                    const formatted = parseInt(numericValue).toLocaleString('es-CO');
+                                                    setEditingPocketBalance(formatted);
+                                                }
+                                            }}
+                                            keyboardType="numeric"
+                                        />
+                                    </ThemedView>
+
+                                    <ThemedText style={{ fontSize: 13, color: '#8E8E93', lineHeight: 18 }}>
+                                        {isCreatingPocket
+                                            ? '* Este será el saldo con el que inicia el bolsillo.'
+                                            : '* El valor ingresado arriba se **SUMARÁ** al saldo actual del bolsillo.'
                                         }
-                                        const formatted = parseInt(numericValue).toLocaleString('es-CO');
-                                        setEditingPocketBalance(formatted);
-                                    }}
-                                    keyboardType="numeric"
-                                />
-                            </ThemedView>
+                                    </ThemedText>
 
-                            <ThemedText style={{ fontSize: 13, color: '#8E8E93', lineHeight: 18 }}>
-                                {isCreatingPocket
-                                    ? '* Este será el saldo con el que inicia el bolsillo.'
-                                    : '* El valor ingresado arriba se **SUMARÁ** al saldo actual del bolsillo.'
-                                }
-                            </ThemedText>
+                                    <ThemedText style={{ fontSize: 14, color: '#999', fontStyle: 'italic', marginBottom: 15, textAlign: 'center' }}>
+                                        {isCreatingPocket
+                                            ? 'Este es el monto inicial con el que se creará el bolsillo.'
+                                            : 'Este dinero se sumará al saldo actual del bolsillo.'}
+                                    </ThemedText>
+
+                                    {/* Botón principal */}
+                                    <TouchableOpacity
+                                        style={[styles.button, styles.saveButton]}
+                                        onPress={isCreatingPocket ? createPocket : savePocketChanges}
+                                        disabled={cargando}
+                                    >
+                                        {cargando ? (
+                                            <ActivityIndicator color="#FFF" />
+                                        ) : (
+                                            <>
+                                                <IconSymbol name="checkmark.circle.fill" size={24} color="#FFF" />
+                                                <ThemedText style={styles.buttonText}>
+                                                    {isCreatingPocket ? 'Crear Bolsillo' : 'Guardar Cambios'}
+                                                </ThemedText>
+                                            </>
+                                        )}
+                                    </TouchableOpacity>
+                                </>
+                            )}
 
                             {/* 3. HISTORIAL (SOLO SI NO ESTAMOS CREANDO) */}
                             {!isCreatingPocket && (
@@ -967,7 +1020,7 @@ export default function AhorrosScreen() {
                                                     color: tx.monto > 0 ? '#4CD964' : '#FF3B30',
                                                     fontWeight: 'bold'
                                                 }}>
-                                                    {tx.monto > 0 ? '+' : ''}{formatCOP(tx.monto)}
+                                                    {tx.monto > 0 ? '+' : ''}{formatCOP(tx.monto, 0)}
                                                 </ThemedText>
                                             </ThemedView>
                                         ))
@@ -978,36 +1031,35 @@ export default function AhorrosScreen() {
                         </ScrollView>
 
                         {/* 4. BOTÓN ACCIÓN (Sticky Bottom) */}
-                        <ThemedView style={{
-                            padding: 20,
-                            backgroundColor: '#FFF',
-                            borderTopWidth: 1,
-                            borderTopColor: '#EEE',
-                            marginBottom: insets.bottom
-                        }}>
-                            <TouchableOpacity
-                                style={{
-                                    backgroundColor: isCreatingPocket ? '#20B2AA' : '#34C759', // Verde Mar para Crear, Verde Claro para Editar
-                                    paddingVertical: 15,
-                                    borderRadius: 15,
-                                    alignItems: 'center',
-                                    shadowColor: isCreatingPocket ? "#20B2AA" : "#34C759",
-                                    shadowOffset: { width: 0, height: 4 },
-                                    shadowOpacity: 0.3,
-                                    shadowRadius: 5,
-                                    elevation: 6
-                                }}
-                                onPress={isCreatingPocket ? createPocket : savePocketChanges}
-                            >
-                                {cargando ? (
-                                    <ActivityIndicator color="#FFF" />
-                                ) : (
+                        {/* This button is now only shown if it's the 'Ganancias' pocket, otherwise the action button is inside the conditional form block */}
+                        {selectedPocket?.nombre === 'Ganancias' && !isCreatingPocket && (
+                            <ThemedView style={{
+                                padding: 20,
+                                backgroundColor: '#FFF',
+                                borderTopWidth: 1,
+                                borderTopColor: '#EEE',
+                                marginBottom: insets.bottom
+                            }}>
+                                <TouchableOpacity
+                                    style={{
+                                        backgroundColor: '#34C759', // Verde Claro para Editar
+                                        paddingVertical: 15,
+                                        borderRadius: 15,
+                                        alignItems: 'center',
+                                        shadowColor: "#34C759",
+                                        shadowOffset: { width: 0, height: 4 },
+                                        shadowOpacity: 0.3,
+                                        shadowRadius: 5,
+                                        elevation: 6
+                                    }}
+                                    onPress={() => setDetailModalVisible(false)} // Just close for Ganancias
+                                >
                                     <ThemedText style={{ color: '#FFF', fontSize: 18, fontWeight: 'bold' }}>
-                                        {isCreatingPocket ? 'Guardar' : 'Listo'}
+                                        Cerrar
                                     </ThemedText>
-                                )}
-                            </TouchableOpacity>
-                        </ThemedView>
+                                </TouchableOpacity>
+                            </ThemedView>
+                        )}
 
                     </ThemedView>
                 )}
@@ -1052,7 +1104,7 @@ export default function AhorrosScreen() {
                                             {tx.bolsillos?.nombre || 'Bolsillo'}
                                         </ThemedText>
                                         <ThemedText style={{ color: '#FF3B30', fontWeight: 'bold' }}>
-                                            {formatCOP(tx.monto)}
+                                            {formatCOP(tx.monto, 0)}
                                         </ThemedText>
                                     </ThemedView>
                                     <ThemedText style={{ color: '#333', marginTop: 5 }}>{tx.concepto}</ThemedText>
@@ -1252,5 +1304,30 @@ const styles = StyleSheet.create({
     },
     deleteButton: {
         backgroundColor: '#A00000',
+    },
+
+    // Estilos para Ganancias Integradas (Compactas)
+    gananciasIntegrada: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        marginTop: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 15,
+        backgroundColor: '#E3F2FD', // Azul claro suave
+        borderRadius: 12,
+        borderWidth: 1.5,
+        borderColor: '#64B5F6', // Azul claro
+    },
+    gananciasLabelCompact: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#1976D2', // Azul más oscuro para el texto
+    },
+    gananciasAmountCompact: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#1565C0', // Azul oscuro para el monto
     }
 });
