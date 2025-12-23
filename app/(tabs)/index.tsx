@@ -5,13 +5,39 @@ import { useAuth } from '@/utilidades/context/AuthContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
 
 import { router } from 'expo-router';
+import { useEffect } from 'react';
 import { Image, StyleSheet, TouchableOpacity } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
-  const { usuario, logout } = useAuth(); 
+  const { usuario, logout } = useAuth();
   const insets = useSafeAreaInsets();
+
+  // Animation values
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    // Continuous pulse animation
+    scale.value = withRepeat(
+      withTiming(1.1, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true // reverse
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scale.value }],
+    };
+  });
 
   //  Ir al login
   const handleAdminLogin = () => {
@@ -20,17 +46,13 @@ export default function HomeScreen() {
 
   //  Acciones
   const handleStartOrder = () => router.push('/(tabs)/seleccionar-mesa');
-  const handlePedidos = () => router.push('/pedidos');
-  const handleInventario = () => router.push('/(tabs)/InventarioScreen');
-  const handleReportes = () => router.push('/(tabs)/reportes');
-const handleAhorros = () => router.push('/(tabs)/ahorrosScreen');
-const handleCocina = () => router.push('/(tabs)/CocinaScreen');
+  const handleAhorros = () => router.push('/(tabs)/ahorrosScreen');
+  const handleCocina = () => router.push('/(tabs)/CocinaScreen');
   const handleCobrar = () => {
     router.push('/cobrar');
   };
 
   const esAdmin = usuario?.rol_id === 1;
-  const esMesero = usuario?.rol_id === 2;
   const esCajera = usuario?.rol_id === 3;
   const esCocinera = usuario?.rol_id === 4;
 
@@ -70,12 +92,12 @@ const handleCocina = () => router.push('/(tabs)/CocinaScreen');
           <IconSymbol name="plus.circle.fill" size={48} color="#fff" />
           <ThemedText style={styles.startOrderText}>Iniciar Orden</ThemedText>
         </TouchableOpacity>
-        
+
         {/* Botón Cobrar - Solo para Admin */}
         {mostrarSalir && (
           <TouchableOpacity style={styles.cobrarButton} onPress={handleCobrar}>
-            <Image 
-              source={require('../../assets/iconocobrar.png')} 
+            <Image
+              source={require('../../assets/iconocobrar.png')}
               style={styles.cobrarIcon}
               resizeMode="contain"
             />
@@ -83,21 +105,26 @@ const handleCocina = () => router.push('/(tabs)/CocinaScreen');
           </TouchableOpacity>
         )}
       </ThemedView>
-{/* Botones de navegación 2*/}
-      <ThemedView style={[styles.mainButtonsContainer, { 
-        paddingBottom: Math.max(insets.bottom + 30, 30) 
-      }]}>
-        
 
-        {/* Solo Admin → Inventario */}
+      {/* Botones de navegación REORGANIZADOS Y SIMPLIFICADOS */}
+      <ThemedView style={[styles.mainButtonsContainer, {
+        paddingBottom: Math.max(insets.bottom + 30, 30)
+      }]}>
+
+        {/* Solo Admin → Ahorros (ANIMADO) */}
         {mostrarSalir && (
-          <TouchableOpacity style={styles.mainButton} onPress={handleAhorros}>
-            <IconSymbol name="cube.box.fill" size={28} color="#FF8C00" />
-            <ThemedText style={styles.mainButtonText}>Ahorros</ThemedText>
-          </TouchableOpacity>
+          <Animated.View style={[animatedStyle]}>
+            <TouchableOpacity
+              style={[styles.mainButton, styles.savingsButton]}
+              onPress={handleAhorros}
+            >
+              <IconSymbol name="cube.box.fill" size={32} color="#FFF" />
+              <ThemedText style={styles.savingsButtonText}>Ahorros</ThemedText>
+            </TouchableOpacity>
+          </Animated.View>
         )}
 
-        {/* Solo Admin → Reportes */}
+        {/* Solo Admin → Cocina */}
         {esAdmin && (
           <TouchableOpacity style={styles.mainButton} onPress={handleCocina}>
             <IconSymbol name="flame.fill" size={28} color="#FF8C00" />
@@ -105,41 +132,12 @@ const handleCocina = () => router.push('/(tabs)/CocinaScreen');
           </TouchableOpacity>
         )}
       </ThemedView>
-      {/* Botones de navegación */}
-      <ThemedView style={[styles.mainButtonsContainer, { 
-        paddingBottom: Math.max(insets.bottom + 30, 30) 
-      }]}>
-        {/* Pedidos → Visible para todos */}
-        <TouchableOpacity style={styles.mainButton} onPress={handlePedidos}>
-          <IconSymbol name="list.clipboard.fill" size={28} color="#FF8C00" />
-          <ThemedText style={styles.mainButtonText}>Pedidos</ThemedText>
-        </TouchableOpacity>
 
-        {/* Solo Admin → Inventario */}
-        {mostrarSalir && (
-          <TouchableOpacity style={styles.mainButton} onPress={handleInventario}>
-            <IconSymbol name="archivebox.fill" size={28} color="#FF8C00" />
-            <ThemedText style={styles.mainButtonText}>Inventario</ThemedText>
-          </TouchableOpacity>
-        )}
-
-        {/* Solo Admin → Reportes */}
-        {esAdmin && (
-          <TouchableOpacity style={styles.mainButton} onPress={handleReportes}>
-            <IconSymbol name="chart.bar.fill" size={28} color="#FF8C00" />
-            <ThemedText style={styles.mainButtonText}>Reportes</ThemedText>
-          </TouchableOpacity>
-        )}
-      </ThemedView>
-      
-      
-      
-      
     </ThemedView>
   );
 }
 
-//  Estilos (idénticos)
+//  Estilos
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -174,9 +172,10 @@ const styles = StyleSheet.create({
   },
   centerSection: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'center', // Center vertically
     alignItems: 'center',
     paddingHorizontal: 40,
+    gap: 20, // Add gap between Iniciar Orden and Cobrar
   },
   startOrderButton: {
     backgroundColor: '#FF8C00',
@@ -192,6 +191,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     minWidth: 200,
+    // Removing marginTop/Bottom to let centerSection handle spacing via gap/justifyContent
   },
   startOrderText: {
     color: '#fff',
@@ -200,18 +200,17 @@ const styles = StyleSheet.create({
   },
   cobrarButton: {
     backgroundColor: '#32CD32',
-    paddingVertical: 21,
+    paddingVertical: 20,
     paddingHorizontal: 38,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 10,
     elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
-    marginTop: 20,
     minWidth: 160,
   },
   cobrarText: {
@@ -220,28 +219,47 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   cobrarIcon: {
-    width: 38,
-    height: 38,
+    width: 32,
+    height: 32,
   },
   mainButtonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-evenly', // Changed to space-evenly for better centering of 2 items
+    alignItems: 'center', // Align items vertically
     paddingHorizontal: 20,
     paddingVertical: 20,
+    gap: 20,
   },
   mainButton: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
     paddingVertical: 20,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     borderRadius: 20,
-    minWidth: 100,
+    minWidth: 110,
     elevation: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,
     shadowRadius: 6,
+  },
+  // New styles for the creative Savings button
+  savingsButton: {
+    backgroundColor: '#4A90E2', // Different color for savings
+    elevation: 10, // Higher elevation
+    shadowColor: '#4A90E2', // Colored shadow
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  savingsButtonText: {
+    marginTop: 8,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFF',
+    textAlign: 'center',
   },
   mainButtonText: {
     marginTop: 8,

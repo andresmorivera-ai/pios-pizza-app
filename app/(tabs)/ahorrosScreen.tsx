@@ -40,10 +40,10 @@ const formatCOP = (value: number | string): string => {
 const cleanFormatToNumber = (formattedValue: string): number => {
     // 1. Elimina todo lo que no sea dígito o coma (,)
     let cleanText = formattedValue.replace(/[^\d,]/g, '');
-    
+
     // 2. Reemplaza la coma decimal (,) por el punto decimal (.)
     cleanText = cleanText.replace(',', '.');
-    
+
     return parseFloat(cleanText) || 0;
 };
 
@@ -72,27 +72,116 @@ export default function AhorrosScreen() {
     // @ts-ignore
     const navigation = useNavigation();
 
-    // Estados para Modales y Transacciones
-    const [isAddPocketModalVisible, setAddPocketModalVisible] = useState(false);
-    const [newPocketName, setNewPocketName] = useState('');
+    // Estados para Modales y Acciones
+    const [isDetailModalVisible, setDetailModalVisible] = useState(false);
+    const [editingPocketName, setEditingPocketName] = useState('');
+    const [editingPocketBalance, setEditingPocketBalance] = useState('');
+    const [isCreatingPocket, setIsCreatingPocket] = useState(false);
 
-    // Estados para Transacciones (sin Picker)
+    const [selectedPocket, setSelectedPocket] = useState<Bolsillo | null>(null);
+    const [pocketTransactions, setPocketTransactions] = useState<any[]>([]);
+    const [loadingTransactions, setLoadingTransactions] = useState(false);
+
+    // ... (Detail State) ...
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // Lógica para crear bolsillo
+    const createPocket = async () => {
+        const name = editingPocketName.trim();
+        const amountRaw = editingPocketBalance.replace(/[^0-9]/g, '');
+        const initialBalance = amountRaw ? parseFloat(amountRaw) : 0;
+
+        if (!name) {
+            Alert.alert('Error', 'El nombre no puede estar vacío.');
+            return;
+        }
+
+        if (initialBalance <= 0) {
+            Alert.alert('Monto Inválido', 'El bolsillo debe crearse con un monto mayor a $0.');
+            return;
+        }
+
+        setCargando(true);
+
+        const { data: pocketData, error: pocketError } = await supabase
+            .from('bolsillos')
+            .insert([{ nombre: name, saldo: initialBalance }])
+            .select()
+            .single();
+
+
+
+        if (pocketData) {
+            const { error: txError } = await supabase
+                .from('bolsillos_transacciones')
+                .insert([{
+                    bolsillo_id: pocketData.id,
+                    monto: initialBalance,
+                    concepto: 'Depósito Inicial'
+                }]);
+
+            if (txError) console.warn('Error logueando depósito inicial:', txError);
+        }
+
+        setCargando(false);
+        setEditingPocketName('');
+        setEditingPocketBalance('');
+        setDetailModalVisible(false);
+        fetchBolsillos();
+    };
+
+    // Al abrir detalle
+    const openPocketDetail = (pocket: Bolsillo) => {
+        setSelectedPocket(pocket);
+        setEditingPocketName(pocket.nombre);
+        setEditingPocketBalance('');
+        setIsCreatingPocket(false);
+        setDetailModalVisible(true);
+        fetchTransactions(pocket.id);
+    };
+
+    const openCreateModal = () => {
+        setSelectedPocket(null); // No hay bolsillo seleccionado
+        setEditingPocketName('');
+        setEditingPocketBalance('');
+        setIsCreatingPocket(true); // MODO CREACIÓN
+        setDetailModalVisible(true);
+    };
+
+    // Estados para Transacciones
     const [isTransactionModalVisible, setTransactionModalVisible] = useState(false);
     const [transactionType, setTransactionType] = useState<TransactionType>('guardar');
-    
-    // amount ahora guarda el valor NUMÉRICO, y amountFormatted guarda el string formateado para el input.
-    const [amount, setAmount] = useState<number>(0); 
-    const [amountFormatted, setAmountFormatted] = useState<string>(''); // Nuevo estado para el input
-    
+
+    // Estados para Input de Monto
+    const [amount, setAmount] = useState<number>(0);
+    const [amountFormatted, setAmountFormatted] = useState<string>('');
+
     const [activePocketForTransaction, setActivePocketForTransaction] = useState<Bolsillo | null>(null);
     const [concept, setConcept] = useState('');
 
-    // Estados para Edición y Eliminación
-    const [isEditPocketModalVisible, setEditPocketModalVisible] = useState(false);
-    const [editingPocket, setEditingPocket] = useState<Bolsillo | null>(null);
-    const [editingPocketName, setEditingPocketName] = useState('');
 
-    // Super Total (Calculado en tiempo real)
+
+    // Estados para Historial Global
+    const [isGlobalHistoryVisible, setGlobalHistoryVisible] = useState(false);
+    const [globalTransactions, setGlobalTransactions] = useState<any[]>([]);
+
+    // Super Total
     const superTotal = useMemo(() => {
         return bolsillos.reduce((sum, pocket) => sum + (pocket.saldo || 0), 0);
     }, [bolsillos]);
@@ -116,7 +205,7 @@ export default function AhorrosScreen() {
         saldo: parseFloat(record.saldo.toString())
     });
 
-    // Función para cargar los bolsillos (SIN CAMBIOS)
+    // Función para cargar los bolsillos
     const fetchBolsillos = useCallback(async () => {
         setCargando(true);
         try {
@@ -138,6 +227,53 @@ export default function AhorrosScreen() {
         }
     }, []);
 
+    // Cargar historial de transacciones de un bolsillo
+    const fetchTransactions = async (pocketId: number) => {
+        setLoadingTransactions(true);
+        try {
+            const { data, error } = await supabase
+                .from('bolsillos_transacciones')
+                .select('*')
+                .eq('bolsillo_id', pocketId)
+                .order('created_at', { ascending: false })
+                .limit(50); // Últimas 50 transacciones
+
+            if (error) throw error;
+            setPocketTransactions(data || []);
+        } catch (error) {
+            console.error('Error cargando transacciones:', error);
+            // No bloqueamos por fallo de historial
+        } finally {
+            setLoadingTransactions(false);
+        }
+    };
+
+    // Cargar historial GLOBAL de retiros/gastos
+    const fetchGlobalWithdrawals = async () => {
+        setLoadingTransactions(true);
+        try {
+            // Buscamos transacciones donde el monto sea negativo (retiros/gastos)
+            // Opcional: Podríamos filtrar por concepto 'Gasto' si quisiéramos ser más específicos
+            const { data, error } = await supabase
+                .from('bolsillos_transacciones')
+                .select('*, bolsillos(nombre)')
+                .lt('monto', 0) // Menor a 0 (Retiros/Gastos)
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            if (error) throw error;
+            setGlobalTransactions(data || []);
+            setGlobalHistoryVisible(true);
+        } catch (error) {
+            console.error('Error cargando historial global:', error);
+            Alert.alert('Error', 'No se pudo cargar el historial.');
+        } finally {
+            setLoadingTransactions(false);
+        }
+    };
+
+
+
     //  Manejador de Actualización en Tiempo Real (Realtime) (SIN CAMBIOS)
     const handleRealtimeUpdate = (payload: RealtimePostgresChangesPayload<BolsilloRaw>) => {
         setBolsillos(prevBolsillos => {
@@ -157,11 +293,19 @@ export default function AhorrosScreen() {
                         updatedBolsillos = updatedBolsillos.map(bolsillo =>
                             bolsillo.id === newBolsillo.id ? newBolsillo : bolsillo
                         );
+                        // ACTUALIZAR BOLSILLO SELECCIONADO SI ESTÁ ABIERTO
+                        if (selectedPocket && selectedPocket.id === newBolsillo.id) {
+                            setSelectedPocket(newBolsillo);
+                        }
                     }
                     break;
                 case 'DELETE':
                     if (oldRecord && oldRecord.id) {
                         updatedBolsillos = updatedBolsillos.filter(bolsillo => bolsillo.id !== oldRecord.id);
+                        if (selectedPocket && selectedPocket.id === oldRecord.id) {
+                            setDetailModalVisible(false);
+                            setSelectedPocket(null);
+                        }
                     }
                     break;
             }
@@ -225,63 +369,85 @@ export default function AhorrosScreen() {
         return true;
     };
 
-    // Lógica para crear bolsillo (SIN CAMBIOS)
-    const createPocket = async () => {
-        if (!newPocketName.trim()) {
+
+
+
+
+    //  LÓGICA DE GUARDAR CAMBIOS (RENOMBRAR + SUMAR SALDO)
+    const savePocketChanges = async () => {
+        if (!selectedPocket) return;
+
+        const newName = editingPocketName.trim();
+        // El valor ingresado es lo que se VA A DEJAR (Sumar), no el total
+        const amountToAddRaw = editingPocketBalance.replace(/[^0-9]/g, '');
+        const amountToAdd = amountToAddRaw ? parseFloat(amountToAddRaw) : 0;
+
+        if (!newName) {
             Alert.alert('Error', 'El nombre no puede estar vacío.');
             return;
         }
 
-        const { error } = await supabase
-            .from('bolsillos')
-            .insert([
-                { nombre: newPocketName.trim(), saldo: 0 }
-            ]);
-
-        if (error) {
-            console.error('Error al crear bolsillo:', error);
-            Alert.alert('Error', 'No se pudo crear el bolsillo.');
-            return;
-        }
-
-        setNewPocketName('');
-        setAddPocketModalVisible(false);
-    };
-
-    //  LÓGICA DE RENOMBRAR (SIN CAMBIOS)
-    const renamePocket = async () => {
-        if (!editingPocket || !editingPocketName.trim()) return;
-
         setCargando(true);
-        const { error } = await supabase
-            .from('bolsillos')
-            .update({ nombre: editingPocketName.trim() })
-            .eq('id', editingPocket.id);
 
-        setCargando(false);
-        if (error) {
-            console.error('Error al renombrar bolsillo:', error);
-            Alert.alert('Error', 'No se pudo renombrar el bolsillo.');
-        } else {
-            Alert.alert('Éxito', `Bolsillo renombrado a: ${editingPocketName.trim()}`);
-            setEditPocketModalVisible(false);
-            setEditingPocket(null);
-            setEditingPocketName('');
+        try {
+            // 1. Calcular Nuevo Saldo (SUMAR lo que se deja al saldo actual)
+            // Si el usuario no escribe nada, amountToAdd es 0, solo cambia nombre.
+            const currentBalance = selectedPocket.saldo;
+            const newTotalBalance = currentBalance + amountToAdd;
+
+            // 2. Actualizar Bolsillo
+            const { error: updateError } = await supabase
+                .from('bolsillos')
+                .update({
+                    nombre: newName,
+                    saldo: newTotalBalance
+                })
+                .eq('id', selectedPocket.id);
+
+            if (updateError) throw updateError;
+
+            // 3. Registrar transacción SOLO si hubo dinero agregado
+            if (amountToAdd > 0) {
+                const { error: txError } = await supabase
+                    .from('bolsillos_transacciones')
+                    .insert([{
+                        bolsillo_id: selectedPocket.id,
+                        monto: amountToAdd,
+                        concepto: 'Dinero dejado en bolsillo'
+                    }]);
+                if (txError) console.warn('Error historial ajuste:', txError);
+            }
+
+            Alert.alert('Éxito', 'Bolsillo actualizado correctamente.');
+            setDetailModalVisible(false);
+            fetchBolsillos();
+
+        } catch (error) {
+            console.error('Error al guardar bolsillo:', error);
+            Alert.alert('Error', 'No se pudo actualizado el bolsillo.');
+        } finally {
+            setCargando(false);
         }
     };
 
-    //  LÓGICA DE ELIMINAR (SIN CAMBIOS)
-    const deletePocket = async () => {
-        if (!editingPocket) return;
 
-        if (editingPocket.saldo > 0) {
-            Alert.alert('Error', 'No puedes eliminar un bolsillo con saldo. Retira el dinero primero.');
-            return;
-        }
+    //  LÓGICA DE ELIMINAR
+    const deletePocket = async () => {
+        if (!selectedPocket) return;
+
+        // NOTA: Se eliminó la restricción de saldo > 0 según el nuevo diseño visual,
+        // pero es una buena práctica advertir si hay dinero.
+        // Si el usuario quiere eliminar, asumimos que "bota" el dinero o ya lo sacó.
+        // Sin embargo, para mayor seguridad, podemos mantener la alerta si tiene saldo.
+
+        const tieneSaldo = selectedPocket.saldo > 0;
+        const mensaje = tieneSaldo
+            ? `Este bolsillo tiene ${formatCOP(selectedPocket.saldo)}. Si lo eliminas, perderás el registro de este dinero.`
+            : '¿Estás seguro de que quieres eliminar este bolsillo permanentemente?';
 
         Alert.alert(
-            'Confirmar Eliminación',
-            `¿Estás seguro de que quieres eliminar permanentemente el bolsillo "${editingPocket.nombre}"?`,
+            'Eliminar Bolsillo',
+            mensaje,
             [
                 { text: 'Cancelar', style: 'cancel' },
                 {
@@ -292,16 +458,16 @@ export default function AhorrosScreen() {
                         const { error } = await supabase
                             .from('bolsillos')
                             .delete()
-                            .eq('id', editingPocket.id);
+                            .eq('id', selectedPocket.id);
 
                         setCargando(false);
                         if (error) {
                             console.error('Error al eliminar bolsillo:', error);
-                            Alert.alert('Error', 'No se pudo eliminar el bolsillo.');
+                            Alert.alert('Error', 'No se pudo eliminar el bolsillo (verifica que no tenga gastos asociados o historial).');
                         } else {
-                            Alert.alert('Éxito', `Bolsillo "${editingPocket.nombre}" eliminado.`);
-                            setEditPocketModalVisible(false);
-                            setEditingPocket(null);
+                            setDetailModalVisible(false);
+                            setSelectedPocket(null);
+                            fetchBolsillos();
                         }
                     },
                 },
@@ -310,12 +476,7 @@ export default function AhorrosScreen() {
         );
     };
 
-    // Abre el modal de edición/eliminación (SIN CAMBIOS)
-    const openEditModal = (bolsillo: Bolsillo) => {
-        setEditingPocket(bolsillo);
-        setEditingPocketName(bolsillo.nombre);
-        setEditPocketModalVisible(true);
-    };
+
 
     // Lógica para retiros múltiples (SIN CAMBIOS - Solo usa formatCOP en el mensaje)
     const withdrawWithMultiplePockets = async (mainPocket: Bolsillo, totalAmount: number, missingAmount: number, otherPockets: Bolsillo[]) => {
@@ -346,7 +507,7 @@ export default function AhorrosScreen() {
 
             remainingToWithdraw -= withdrawAmount;
         }
-        
+
         // Formato COP para el mensaje de éxito
         Alert.alert('✅ Éxito Completo', `Retiro de ${formatCOP(totalAmount)} completado usando múltiples bolsillos.\nConcepto: ${finalConcept}`);
     };
@@ -411,7 +572,7 @@ export default function AhorrosScreen() {
                     minimumFractionDigits: 0,
                     maximumFractionDigits: 0,
                 }).format(numericValue);
-                
+
                 // Reemplazamos el separador decimal de Intl por la coma de miles (visual)
                 let finalFormattedText = formattedValue.replace(/\./g, '#').replace(/,/g, '.').replace(/#/g, '.');
                 setAmountFormatted(finalFormattedText);
@@ -519,44 +680,26 @@ export default function AhorrosScreen() {
 
     // --- Componentes de Renderizado ---
 
-    // BolsilloCard (Usa formatCOP)
+    // BolsilloCard Actualizada (Solo visual, al tocar abre detalle)
     const BolsilloCard = ({ bolsillo }: { bolsillo: Bolsillo }) => (
-        <ThemedView style={styles.pocketCardContainer}>
-            <TouchableOpacity style={styles.pocketCard} onPress={() => openEditModal(bolsillo)}>
-                <ThemedText style={styles.pocketName}>💰 {bolsillo.nombre}</ThemedText>
+        <TouchableOpacity
+            style={styles.pocketCardContainer}
+            onPress={() => openPocketDetail(bolsillo)}
+            activeOpacity={0.9}
+        >
+            <ThemedView style={styles.pocketCard}>
+                <ThemedView style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <ThemedText style={styles.pocketName}>{bolsillo.nombre}</ThemedText>
+                </ThemedView>
+
                 <ThemedView style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <ThemedText style={styles.pocketBalance} type="subtitle">
-                        {/* Aplicar formatCOP para el saldo */}
                         {formatCOP(bolsillo.saldo)}
                     </ThemedText>
-                    <IconSymbol name="pencil.circle" size={24} color="#888" style={{ marginLeft: 10 }} />
+                    <IconSymbol name="chevron.right" size={20} color="#CCC" style={{ marginLeft: 10 }} />
                 </ThemedView>
-            </TouchableOpacity>
-
-            {/* BOTONES INDEPENDIENTES DE ACCIÓN (SIN CAMBIOS) */}
-            <ThemedView style={styles.cardActions}>
-                <TouchableOpacity
-                    style={[styles.button, styles.saveButton, styles.smallButton]}
-                    onPress={() => openTransactionModal('guardar', bolsillo)}
-                >
-                    <IconSymbol name="list.clipboard.fill" size={18} color="#FFF" />
-                    <ThemedText style={styles.smallButtonText}>Guardar</ThemedText>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[
-                        styles.button,
-                        styles.withdrawButton,
-                        styles.smallButton,
-                        bolsillo.saldo <= 0 && styles.disabledButton
-                    ]}
-                    onPress={() => openTransactionModal('quitar', bolsillo)}
-                    disabled={bolsillo.saldo <= 0}
-                >
-                    <IconSymbol name="cube" size={18} color="#FFF" />
-                    <ThemedText style={styles.smallButtonText}>Quitar</ThemedText>
-                </TouchableOpacity>
             </ThemedView>
-        </ThemedView>
+        </TouchableOpacity>
     );
 
 
@@ -583,9 +726,21 @@ export default function AhorrosScreen() {
                     </ThemedText>
                 ) : (
                     <ThemedView>
-                        <ThemedText style={styles.instructionText}>
-                            Toca el nombre/saldo para editar. Usa los botones Guardar/Quitar.
-                        </ThemedText>
+                        <TouchableOpacity
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: '#E0E0E0',
+                                padding: 10,
+                                borderRadius: 10,
+                                marginBottom: 15
+                            }}
+                            onPress={() => fetchGlobalWithdrawals()}
+                        >
+                            <IconSymbol name="list.bullet.rectangle.fill" size={20} color="#555" />
+                            <ThemedText style={{ marginLeft: 8, color: '#333', fontWeight: 'bold' }}>Ver Movimientos (Gastos)</ThemedText>
+                        </TouchableOpacity>
                         {bolsillos.map((bolsillo) => (
                             <BolsilloCard key={bolsillo.id} bolsillo={bolsillo} />
                         ))}
@@ -597,7 +752,7 @@ export default function AhorrosScreen() {
             <ThemedView style={styles.bottomActions}>
                 <TouchableOpacity
                     style={[styles.button, styles.createPocketButton]}
-                    onPress={() => setAddPocketModalVisible(true)}
+                    onPress={openCreateModal}
                 >
                     <IconSymbol name="list.clipboard.fill" size={24} color="#FFF" />
                     <ThemedText style={styles.buttonText}>Crear Nuevo Bolsillo</ThemedText>
@@ -606,28 +761,7 @@ export default function AhorrosScreen() {
 
             {/* --- Modales --- */}
 
-            {/* Modal para Crear Bolsillo (SIN CAMBIOS) */}
-            <Modal isVisible={isAddPocketModalVisible} onBackdropPress={() => setAddPocketModalVisible(false)}>
-                {isAddPocketModalVisible && (
-                    <ThemedView style={styles.modalContent}>
-                        <ThemedText style={styles.modalTitle} type="subtitle">Crear Nuevo Bolsillo</ThemedText>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Nombre del Bolsillo (Ej: Viaje, Emergencia)"
-                            value={newPocketName}
-                            onChangeText={setNewPocketName}
-                            maxLength={30}
-                        />
 
-                        <TouchableOpacity
-                            style={[styles.button, styles.createPocketButton]} 
-                            onPress={createPocket}
-                        >
-                            <ThemedText style={styles.buttonText}>Crear Bolsillo</ThemedText>
-                        </TouchableOpacity>
-                    </ThemedView>
-                )}
-            </Modal>
 
             {/* Modal para Transacciones (Guardar/Quitar) */}
             <Modal
@@ -666,7 +800,7 @@ export default function AhorrosScreen() {
 
                         <TouchableOpacity
                             style={[
-                                styles.button, 
+                                styles.button,
                                 transactionType === 'quitar' ? styles.withdrawButton : styles.saveButton,
                                 // Usar el valor NUMÉRICO para la validación
                                 (amount <= 0) && styles.disabledButton
@@ -683,61 +817,253 @@ export default function AhorrosScreen() {
                 )}
             </Modal>
 
-            {/* MODAL DE EDICIÓN/ELIMINACIÓN */}
-            <Modal isVisible={isEditPocketModalVisible} onBackdropPress={() => setEditPocketModalVisible(false)}>
-                {isEditPocketModalVisible && editingPocket && (
-                    <ThemedView style={styles.modalContent}>
-                        <ThemedText style={styles.modalTitle} type="subtitle">
-                            Editar **{editingPocket.nombre}**
-                        </ThemedText>
+            {/* MODAL DE DETALLE Y EDICIÓN / CREACIÓN DE BOLSILLO */}
+            <Modal
+                isVisible={isDetailModalVisible}
+                onBackdropPress={() => setDetailModalVisible(false)}
+                style={{ margin: 0, justifyContent: 'flex-end' }}
+                propagateSwipe={true}
+            >
+                {/* Mostramos el modal si hay bolsillo seleccionado O si estamos creando uno */}
+                {isDetailModalVisible && (selectedPocket || isCreatingPocket) && (
+                    <ThemedView style={{
+                        backgroundColor: '#F7F7F7',
+                        height: '92%',
+                        borderTopLeftRadius: 25,
+                        borderTopRightRadius: 25,
+                        overflow: 'hidden'
+                    }}>
 
-                        <ThemedText style={styles.pickerLabel} type="default">
-                            {/* Aplicar formatCOP para el saldo actual */}
-                            Saldo Actual: **{formatCOP(editingPocket.saldo)}**
-                        </ThemedText>
+                        {/* HEADER DE ACCIONES: Volver y Eliminar */}
+                        <ThemedView style={{
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            paddingHorizontal: 20,
+                            paddingTop: 20,
+                            paddingBottom: 10,
+                            backgroundColor: '#FFF'
+                        }}>
+                            <TouchableOpacity onPress={() => setDetailModalVisible(false)}>
+                                <IconSymbol name="xmark.circle.fill" size={30} color="#CCC" />
+                            </TouchableOpacity>
 
-                        {/* Campo para renombrar (SIN CAMBIOS) */}
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Nuevo nombre para el bolsillo"
-                            value={editingPocketName}
-                            onChangeText={setEditingPocketName}
-                            maxLength={30}
-                        />
+                            {/* Solo mostrar eliminar si NO estamos creando */}
+                            {!isCreatingPocket && (
+                                <TouchableOpacity onPress={deletePocket} style={{ padding: 5 }}>
+                                    <IconSymbol name="trash" size={28} color="#FF3B30" />
+                                </TouchableOpacity>
+                            )}
+                        </ThemedView>
 
-                        {/* Botón Renombrar (SIN CAMBIOS) */}
-                        <TouchableOpacity
-                            style={[
-                                styles.button, 
-                                styles.createPocketButton,
-                                (editingPocketName.trim() === editingPocket.nombre || !editingPocketName.trim()) && styles.disabledButton
-                            ]}
-                            onPress={renamePocket}
-                            disabled={editingPocketName.trim() === editingPocket.nombre || !editingPocketName.trim()}
-                        >
-                            <ThemedText style={styles.buttonText}>Guardar Nuevo Nombre</ThemedText>
-                        </TouchableOpacity>
+                        <ScrollView contentContainerStyle={{ padding: 25 }}>
 
-                        {/* Separador (SIN CAMBIOS) */}
-                        <ThemedView style={styles.separator} />
+                            {/* 1. HEADER CREATIVO (Nombre y Saldo) */}
+                            <ThemedView style={{
+                                backgroundColor: '#20B2AA', // LightSeaGreen
+                                borderRadius: 20,
+                                padding: 28,
+                                alignItems: 'center',
+                                marginBottom: 30,
+                                shadowColor: "#000",
+                                shadowOffset: { width: 0, height: 5 },
+                                shadowOpacity: 0.15,
+                                shadowRadius: 10,
+                                elevation: 5
+                            }}>
+                                <ThemedText style={{ color: 'rgba(255,255,255,0.9)', fontSize: 16, marginBottom: 5, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1 }}>
+                                    {editingPocketName || (isCreatingPocket ? 'Nuevo Bolsillo' : '')}
+                                </ThemedText>
+                                <ThemedText style={{ color: '#FFF', fontSize: 30, fontWeight: '900' }}>
+                                    {isCreatingPocket
+                                        ? (editingPocketBalance ? `$${editingPocketBalance}` : '$0')
+                                        : (selectedPocket ? formatCOP(selectedPocket.saldo) : '$0')
+                                    }
+                                </ThemedText>
+                                <ThemedText style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14, marginTop: 5 }}>
+                                    {isCreatingPocket ? 'Saldo Inicial' : 'Saldo Actual'}
+                                </ThemedText>
+                            </ThemedView>
 
-                        {/* Botón Eliminar (SIN CAMBIOS) */}
-                        <TouchableOpacity
-                            style={[
-                                styles.button, 
-                                styles.deleteButton,
-                                editingPocket.saldo > 0 && styles.disabledButton
-                            ]}
-                            onPress={deletePocket}
-                            disabled={editingPocket.saldo > 0}
-                        >
-                            <ThemedText style={styles.buttonText}>
-                                {editingPocket.saldo > 0 ? '🚫 SALDO > $0.00' : '🗑️ Eliminar Bolsillo'}
+
+                            {/* 2. FORMULARIO DE EDICIÓN / CREACIÓN */}
+                            <ThemedText type="subtitle" style={{ marginBottom: 20, color: '#333' }}>
+                                {isCreatingPocket ? 'Detalles del Nuevo Bolsillo' : 'Editar Detalles'}
                             </ThemedText>
-                        </TouchableOpacity>
+
+                            {/* Input Nombre */}
+                            <ThemedText style={{ marginBottom: 8, color: '#666', fontWeight: '600' }}>Nombre del Bolsillo</ThemedText>
+                            <TextInput
+                                style={[styles.input, { backgroundColor: '#FFF', borderColor: '#E5E5EA' }]}
+                                placeholder="Ej: Viaje, Ahorros"
+                                value={editingPocketName}
+                                onChangeText={setEditingPocketName}
+                                maxLength={30}
+                            />
+
+                            {/* Input Saldo */}
+                            <ThemedText style={{ marginBottom: 8, color: '#666', fontWeight: '600' }}>
+                                {isCreatingPocket ? 'Monto Inicial' : '¿Cuánto vas a dejar?'}
+                            </ThemedText>
+                            <ThemedView style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                backgroundColor: '#FFF',
+                                borderWidth: 1,
+                                borderColor: '#E5E5EA',
+                                borderRadius: 12,
+                                paddingHorizontal: 15,
+                                marginBottom: 10
+                            }}>
+                                <ThemedText style={{ fontSize: 24, fontWeight: 'bold', color: '#333' }}>$</ThemedText>
+                                <TextInput
+                                    style={{ flex: 1, fontSize: 24, fontWeight: 'bold', padding: 15, color: '#333' }}
+                                    placeholder="0"
+                                    value={editingPocketBalance}
+                                    onChangeText={(text) => {
+                                        const numericValue = text.replace(/[^0-9]/g, '');
+                                        if (!numericValue) {
+                                            setEditingPocketBalance('');
+                                            return;
+                                        }
+                                        const formatted = parseInt(numericValue).toLocaleString('es-CO');
+                                        setEditingPocketBalance(formatted);
+                                    }}
+                                    keyboardType="numeric"
+                                />
+                            </ThemedView>
+
+                            <ThemedText style={{ fontSize: 13, color: '#8E8E93', lineHeight: 18 }}>
+                                {isCreatingPocket
+                                    ? '* Este será el saldo con el que inicia el bolsillo.'
+                                    : '* El valor ingresado arriba se **SUMARÁ** al saldo actual del bolsillo.'
+                                }
+                            </ThemedText>
+
+                            {/* 3. HISTORIAL (SOLO SI NO ESTAMOS CREANDO) */}
+                            {!isCreatingPocket && (
+                                <ThemedView style={{ marginTop: 30, marginBottom: 20 }}>
+                                    <ThemedText type="subtitle" style={{ marginBottom: 15, color: '#333' }}>Movimientos Recientes</ThemedText>
+                                    {loadingTransactions ? (
+                                        <ActivityIndicator size="small" color="#20B2AA" />
+                                    ) : pocketTransactions.length === 0 ? (
+                                        <ThemedText style={{ color: '#999', fontStyle: 'italic' }}>No hay movimientos registrados.</ThemedText>
+                                    ) : (
+                                        pocketTransactions.map((tx) => (
+                                            <ThemedView key={tx.id} style={{
+                                                flexDirection: 'row',
+                                                justifyContent: 'space-between',
+                                                paddingVertical: 12,
+                                                borderBottomWidth: 1,
+                                                borderBottomColor: '#EEE'
+                                            }}>
+                                                <ThemedView style={{ flex: 1 }}>
+                                                    <ThemedText style={{ color: '#333', fontWeight: '500' }}>{tx.concepto || 'Movimiento'}</ThemedText>
+                                                    <ThemedText style={{ color: '#999', fontSize: 12 }}>
+                                                        {new Date(tx.created_at).toLocaleDateString()}
+                                                    </ThemedText>
+                                                </ThemedView>
+                                                <ThemedText style={{
+                                                    color: tx.monto > 0 ? '#4CD964' : '#FF3B30',
+                                                    fontWeight: 'bold'
+                                                }}>
+                                                    {tx.monto > 0 ? '+' : ''}{formatCOP(tx.monto)}
+                                                </ThemedText>
+                                            </ThemedView>
+                                        ))
+                                    )}
+                                </ThemedView>
+                            )}
+
+                        </ScrollView>
+
+                        {/* 4. BOTÓN ACCIÓN (Sticky Bottom) */}
+                        <ThemedView style={{
+                            padding: 20,
+                            backgroundColor: '#FFF',
+                            borderTopWidth: 1,
+                            borderTopColor: '#EEE',
+                            marginBottom: insets.bottom
+                        }}>
+                            <TouchableOpacity
+                                style={{
+                                    backgroundColor: isCreatingPocket ? '#20B2AA' : '#34C759', // Verde Mar para Crear, Verde Claro para Editar
+                                    paddingVertical: 15,
+                                    borderRadius: 15,
+                                    alignItems: 'center',
+                                    shadowColor: isCreatingPocket ? "#20B2AA" : "#34C759",
+                                    shadowOffset: { width: 0, height: 4 },
+                                    shadowOpacity: 0.3,
+                                    shadowRadius: 5,
+                                    elevation: 6
+                                }}
+                                onPress={isCreatingPocket ? createPocket : savePocketChanges}
+                            >
+                                {cargando ? (
+                                    <ActivityIndicator color="#FFF" />
+                                ) : (
+                                    <ThemedText style={{ color: '#FFF', fontSize: 18, fontWeight: 'bold' }}>
+                                        {isCreatingPocket ? 'Guardar' : 'Listo'}
+                                    </ThemedText>
+                                )}
+                            </TouchableOpacity>
+                        </ThemedView>
 
                     </ThemedView>
                 )}
+            </Modal>
+
+            {/* MODAL HISTORIAL GLOBAL DE GASTOS */}
+            <Modal
+                isVisible={isGlobalHistoryVisible}
+                onBackdropPress={() => setGlobalHistoryVisible(false)}
+                style={{ margin: 0, justifyContent: 'flex-end' }}
+                propagateSwipe={true}
+            >
+                <ThemedView style={{
+                    backgroundColor: '#FFF',
+                    height: '80%',
+                    borderTopLeftRadius: 20,
+                    borderTopRightRadius: 20,
+                    padding: 20
+                }}>
+                    <ThemedView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                        <ThemedText type="subtitle" style={{ color: '#333' }}>Historial de Gastos/Retiros</ThemedText>
+                        <TouchableOpacity onPress={() => setGlobalHistoryVisible(false)}>
+                            <IconSymbol name="xmark.circle.fill" size={28} color="#CCC" />
+                        </TouchableOpacity>
+                    </ThemedView>
+
+                    <ScrollView>
+                        {globalTransactions.length === 0 ? (
+                            <ThemedText style={{ textAlign: 'center', color: '#888', marginTop: 50 }}>
+                                No se encontraron gastos recientes.
+                            </ThemedText>
+                        ) : (
+                            globalTransactions.map((tx) => (
+                                <ThemedView key={tx.id} style={{
+                                    padding: 15,
+                                    backgroundColor: '#F9F9F9',
+                                    borderRadius: 10,
+                                    marginBottom: 10
+                                }}>
+                                    <ThemedView style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                        <ThemedText style={{ fontWeight: 'bold', color: '#555' }}>
+                                            {tx.bolsillos?.nombre || 'Bolsillo'}
+                                        </ThemedText>
+                                        <ThemedText style={{ color: '#FF3B30', fontWeight: 'bold' }}>
+                                            {formatCOP(tx.monto)}
+                                        </ThemedText>
+                                    </ThemedView>
+                                    <ThemedText style={{ color: '#333', marginTop: 5 }}>{tx.concepto}</ThemedText>
+                                    <ThemedText style={{ color: '#999', fontSize: 12, marginTop: 5 }}>
+                                        {new Date(tx.created_at).toLocaleString()}
+                                    </ThemedText>
+                                </ThemedView>
+                            ))
+                        )}
+                    </ScrollView>
+                </ThemedView>
             </Modal>
         </ThemedView>
     );
@@ -861,14 +1187,14 @@ const styles = StyleSheet.create({
         marginLeft: 5,
     },
     createPocketButton: {
-        backgroundColor: '#1E90FF', 
+        backgroundColor: '#1E90FF',
     },
     saveButton: {
-        backgroundColor: '#3CB371', 
+        backgroundColor: '#3CB371',
         marginRight: 10,
     },
     withdrawButton: {
-        backgroundColor: '#FF6347', 
+        backgroundColor: '#FF6347',
     },
     buttonText: {
         color: '#fff',
@@ -925,6 +1251,6 @@ const styles = StyleSheet.create({
         marginVertical: 20,
     },
     deleteButton: {
-        backgroundColor: '#A00000', 
+        backgroundColor: '#A00000',
     }
 });

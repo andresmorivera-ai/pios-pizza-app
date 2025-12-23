@@ -16,7 +16,7 @@ interface Producto {
   descripcion: string;
   precio: number;
   categoria: string;
-  tamano: string; // "1/2:10,entero:20" (tamano:precio separado por comas)
+  tamaño: string; // "1/2:10,entero:20" (tamano:precio separado por comas)
 }
 
 interface TamanoOpcion {
@@ -66,13 +66,13 @@ export default function CrearOrdenScreen() {
   const ordenEnCurso = esOrdenMesa ? ordenMesaEnCurso : ordenGeneralEnCurso;
 
   // Orden personalizado de categorías
-  const ordenCategorias = ['pollo', 'adicional', 'bebidas', 'combo', 'postre'];
+  const ordenCategorias = ['pollos', 'bebidas', 'jugos naturales', 'combos', 'hamburguesas', 'arroz', 'adicional', 'postre'];
 
   // Cargar productos desde Supabase
   useEffect(() => {
     const obtenerProductos = async () => {
       const { data, error } = await supabase
-        .from('productos')
+        .from('productos_actualizadosNEW')
         .select('*')
         .order('nombre', { ascending: true });
 
@@ -80,11 +80,30 @@ export default function CrearOrdenScreen() {
         console.error('Error cargando productos:', error);
         Alert.alert('Error', 'No se pudieron cargar los productos.');
       } else if (data) {
-        // Normalizar categorías (trim y lowercase)
-        const productosNormalizados = data.map(p => ({
-          ...p,
-          categoria: p.categoria.trim().toLowerCase()
-        }));
+        // Normalizar categorías y agrupar
+        const productosNormalizados = data.map(p => {
+          let categoria = p.categoria.trim().toLowerCase();
+
+          // Agrupación y Mapeo de Categorías
+          if (categoria.includes('arroz')) {
+            categoria = 'arroz';
+          } else if (categoria === 'pollo') {
+            categoria = 'pollos';
+          } else if (categoria === 'combo') {
+            categoria = 'combos';
+          } else if (categoria === 'hamburguesa') {
+            categoria = 'hamburguesas';
+          } else if (categoria === 'bebida') {
+            categoria = 'bebidas';
+          } else if (categoria === 'jugo' || categoria === 'jugos') {
+            categoria = 'jugos naturales';
+          }
+
+          return {
+            ...p,
+            categoria
+          };
+        });
         setProductos(productosNormalizados);
 
         // Seleccionar primera categoría según el orden personalizado
@@ -221,8 +240,8 @@ export default function CrearOrdenScreen() {
   // Convertir variantes a opciones de tamaño
   const variantesAOpciones = (variantes: Producto[]): TamanoOpcion[] => {
     return variantes.map(variante => {
-      // Extraer el nombre del tamaño del campo tamano
-      const tamanoStr = variante.tamano.split(':')[0].trim();
+      // Extraer el nombre del tamaño del campo tamaño
+      const tamanoStr = (variante.tamaño || '').split(':')[0].trim() || 'Único';
       return {
         nombre: tamanoStr,
         precio: variante.precio
@@ -639,7 +658,7 @@ export default function CrearOrdenScreen() {
 
             <ThemedView style={styles.tamanosContainer}>
               {productoParaTamano && obtenerVariantes(productoParaTamano.nombre).map((variante, index) => {
-                const tamanoStr = variante.tamano.split(':')[0].trim();
+                const tamanoStr = (variante.tamaño || '').split(':')[0].trim() || 'Único';
                 const isSelected = varianteSeleccionada?.id === variante.id;
 
                 return (
@@ -670,7 +689,7 @@ export default function CrearOrdenScreen() {
                 <TouchableOpacity
                   style={styles.modalAgregarButton}
                   onPress={() => {
-                    const tamanoStr = varianteSeleccionada.tamano.split(':')[0].trim();
+                    const tamanoStr = (varianteSeleccionada.tamaño || '').split(':')[0].trim() || 'Único';
                     handleAgregarConTamano(
                       { nombre: tamanoStr, precio: varianteSeleccionada.precio },
                       varianteSeleccionada
