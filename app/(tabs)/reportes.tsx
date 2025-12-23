@@ -188,6 +188,11 @@ export default function ReportesScreen() {
   const totalOrdenes = ordenes.length + totalOrdenesPagadas;
   const ordenesCanceladas = ordenes.filter(o => o.estado === 'cancelado').length;
 
+  /* Estado para historial de Caja (Filtrado por rango) */
+  const [historialCajaVisible, setHistorialCajaVisible] = useState(false);
+  const [transaccionesCaja, setTransaccionesCaja] = useState<any[]>([]); // Tipo any para unificación rápida
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
+
   /* Estado para creación diferida de bolsillos */
   const [nuevosBolsillosTemporales, setNuevosBolsillosTemporales] = useState<{ id: string; nombre: string; saldo: number }[]>([]);
 
@@ -222,6 +227,69 @@ export default function ReportesScreen() {
       setBolsillos(data || []);
     } catch (error) {
       console.error('Error cargando bolsillos:', error);
+    }
+  };
+
+  const fetchMovimientosCaja = async () => {
+    setCargandoHistorial(true);
+    setTransaccionesCaja([]);
+    try {
+      const inicio = rangoSeleccionado.inicioDia.toISOString();
+      const fin = rangoSeleccionado.finDia.toISOString();
+
+      // 1. Fetch Transacciones (Filtradas por fecha)
+      const { data: transaccionesData, error: txError } = await supabase
+        .from('bolsillos_transacciones')
+        .select('*, bolsillos(nombre)')
+        .gte('created_at', inicio)
+        .lte('created_at', fin)
+        .order('created_at', { ascending: false });
+
+      if (txError) throw txError;
+
+      // 2. Fetch Gastos (Filtrados por fecha)
+      const { data: gastosData, error: gastosError } = await supabase
+        .from('gastos')
+        .select(`
+            id,
+            created_at:fecha, 
+            valor, 
+            concepto, 
+            nombre,
+            bolsillo_id,
+            bolsillos(nombre)
+        `)
+        .gte('fecha', inicio)
+        .lte('fecha', fin)
+        .order('fecha', { ascending: false });
+
+      if (gastosError) throw gastosError;
+
+      // 3. Unificar (Lógica idéntica a AhorrosScreen)
+      const transaccionesFiltradas = (transaccionesData || []).filter(tx =>
+        !tx.concepto?.startsWith('Gasto: ')
+      );
+
+      const gastosFormateados = (gastosData || []).map(g => ({
+        id: `gasto_${g.id}`,
+        created_at: g.created_at || new Date().toISOString(),
+        monto: -Math.abs(g.valor),
+        concepto: `Gasto: ${g.nombre} ${g.concepto && g.concepto !== 'Sin descripción' ? `(${g.concepto})` : ''}`,
+        bolsillos: g.bolsillos
+      }));
+
+      const listaUnificada = [...transaccionesFiltradas, ...gastosFormateados].sort((a, b) => {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      setTransaccionesCaja(listaUnificada);
+      setHistorialCajaVisible(true);
+
+    } catch (error) {
+      console.error('Error cargando historial caja:', error);
+      Alert.alert('Error', 'No se pudo cargar el historial.');
+    } finally {
+      setCargandoHistorial(false);
     }
   };
 
@@ -414,11 +482,11 @@ export default function ReportesScreen() {
       // Calcular total asignado
       const totalAsignado = Object.values(asignacionesBolsillos).reduce((sum, monto) => sum + monto, 0);
 
-      // Validación: No se puede asignar más de lo que hay en caja
-      if (totalAsignado > balance) {
+      // Validación: No se puede asignar más de lo que hay en ventas (Usuario solicitó base Ventas)
+      if (totalAsignado > totalGanancias) {
         Alert.alert(
           '❌ Mmm no te alcanza',
-          `Has asignado $${totalAsignado.toLocaleString('es-CO')} pero solo tienes $${balance.toLocaleString('es-CO')} en caja.`,
+          `Has asignado $${totalAsignado.toLocaleString('es-CO')} pero tus ventas son $${totalGanancias.toLocaleString('es-CO')}.`,
           [{ text: 'Entendido', style: 'default' }]
         );
         return;
@@ -498,7 +566,7 @@ export default function ReportesScreen() {
       }
 
       // calcular remanente y finalizar
-      const remanente = balance - totalAsignado;
+      const remanente = totalGanancias - totalAsignado;
       const fechaHoy = new Date().toLocaleDateString('es-ES');
 
       if (remanente > 0) {
@@ -571,6 +639,50 @@ export default function ReportesScreen() {
     }
   };
 
+  const checkStatusDia = async () => {
+    if (!esHoyRange) {
+      // Si no es hoy, no bloqueamos el botón "estrictamente" por estado, 
+      // pero la UI ya lo oculta. 
+      // Sin embargo, si quisiéramos ver si ESE día histórico se cerró:
+      // setIsDayFinalized(true/false) based on query.
+      // Por ahora, el usuario pide consistencia para "Hoy".
+      // Aún así, es bueno chequear si ya hay movimientos de cierre en este rango.
+    }
+
+    try {
+      const inicio = rangoSeleccionado.inicioDia.toISOString();
+      const fin = rangoSeleccionado.finDia.toISOString();
+
+      // Buscamos si existe alguna transacción de "Cierre" en este rango
+      // Conceptos clave: "Ahorro Cierre de Día" OR "Ganancias día..."
+      const { data, error } = await supabase
+        .from('bolsillos_transacciones')
+        .select('id, concepto')
+        .gte('created_at', inicio)
+        .lte('created_at', fin)
+        .or('concepto.eq.Ahorro Cierre de Día,concepto.ilike.Ganancias día%')
+        .limit(1);
+
+      if (error) {
+        console.error('Error verificando status dia:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setIsDayFinalized(true);
+      } else {
+        setIsDayFinalized(false);
+      }
+
+    } catch (err) {
+      console.error('Error en checkStatusDia:', err);
+    }
+  };
+
+  useEffect(() => {
+    checkStatusDia();
+  }, [rangoSeleccionado]);
+
 
   const handleFinalizarDia = () => {
     setConfirmacionVisible(false);
@@ -590,9 +702,9 @@ export default function ReportesScreen() {
           </ThemedText>
           {esHoyRange && (
             <TouchableOpacity
-              style={[styles.powerButton, (balance <= 0 || isDayFinalized) && { opacity: 0.5, borderColor: '#CCC' }]}
+              style={[styles.powerButton, (totalGanancias <= 0 || isDayFinalized) && { opacity: 0.5, borderColor: '#CCC' }]}
               onPress={() => {
-                if (balance <= 0 || isDayFinalized) {
+                if (totalGanancias <= 0 || isDayFinalized) {
                   Alert.alert(
                     'No disponible',
                     'No hay saldo en caja para finalizar o el día ya ha sido cerrado.'
@@ -606,7 +718,7 @@ export default function ReportesScreen() {
               <IconSymbol
                 name="power.circle.fill"
                 size={22}
-                color={(balance <= 0 || isDayFinalized) ? "#CCC" : "#D32F2F"}
+                color={(totalGanancias <= 0 || isDayFinalized) ? "#CCC" : "#D32F2F"}
               />
             </TouchableOpacity>
           )}
@@ -665,6 +777,33 @@ export default function ReportesScreen() {
             </ThemedView>
           </TouchableOpacity>
 
+          {/* Indicador de Ganancias Guardadas (Solo visible si finalizado) */}
+          {isDayFinalized && (
+            <ThemedView style={{
+              position: 'absolute',
+              top: -10,
+              right: -5,
+              backgroundColor: '#FFB900', // Dorado
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderRadius: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              elevation: 4,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.2,
+              shadowRadius: 3,
+              zIndex: 10
+            }}>
+              <IconSymbol name="lock.fill" size={12} color="#FFF" />
+              <ThemedText style={{ fontSize: 10, fontWeight: 'bold', color: '#FFF' }}>
+                GUARDADO EN AHORROS
+              </ThemedText>
+            </ThemedView>
+          )}
+
           {/* Tarjeta de Gastos */}
           <TouchableOpacity
             style={styles.tarjetaGastos}
@@ -687,14 +826,18 @@ export default function ReportesScreen() {
             </ThemedView>
           </TouchableOpacity>
 
-          {/* Tarjeta de Caja */}
-          <ThemedView style={styles.tarjetaBalance}>
+          {/* Tarjeta de Caja (Click para ver historial filtrado) */}
+          <TouchableOpacity
+            style={styles.tarjetaBalance}
+            activeOpacity={0.7}
+            onPress={() => fetchMovimientosCaja()}
+          >
             <ThemedView style={styles.tarjetaHeader}>
               <IconSymbol name="chart.line.uptrend.xyaxis" size={30} color="#FF8C00" />
               <ThemedText style={styles.tarjetaTituloBalance}>Caja</ThemedText>
             </ThemedView>
             <ThemedText style={styles.tarjetaValorBalance}>
-              ${(isDayFinalized ? 0 : balance).toLocaleString('es-CO')}
+              ${balance.toLocaleString('es-CO')}
             </ThemedText>
             <ThemedView style={styles.balanceBarra}>
               <ThemedView style={[styles.barraGanancias, { width: totalGastos === 0 ? '100%' : `${(totalGanancias / (totalGanancias + totalGastos)) * 100}%` }]} />
@@ -705,7 +848,7 @@ export default function ReportesScreen() {
                 {totalGastos > 0 && <ThemedText style={styles.balanceGasto}>▼ Gastos</ThemedText>}
               </ThemedText>
             </ThemedView>
-          </ThemedView>
+          </TouchableOpacity>
         </ThemedView>
 
         {/* Estadísticas de Órdenes */}
@@ -891,7 +1034,7 @@ export default function ReportesScreen() {
                         <ThemedText style={styles.balanceDisponibleLabel}>DISPONIBLE A REPARTIR</ThemedText>
                         <View style={styles.disponibleValueWrapper}>
                           <ThemedText style={styles.balanceDisponibleValor}>
-                            ${(balance - Object.values(asignacionesBolsillos).reduce((sum, m) => sum + m, 0)).toLocaleString('es-CO')}
+                            ${(totalGanancias - Object.values(asignacionesBolsillos).reduce((sum, m) => sum + m, 0)).toLocaleString('es-CO')}
                           </ThemedText>
                           {/* Indicador visual animado */}
                           <View style={styles.pulseIndicator} />
@@ -963,7 +1106,7 @@ export default function ReportesScreen() {
                                           return;
                                         }
                                         const totalActual = Object.values(asignacionesBolsillos).reduce((sum, m) => sum + m, 0);
-                                        if (totalActual + monto > balance) {
+                                        if (totalActual + monto > totalGanancias) {
                                           Alert.alert('❌ No alcanza', 'Saldo insuficiente.');
                                           return;
                                         }
@@ -1000,7 +1143,7 @@ export default function ReportesScreen() {
                                           return;
                                         }
                                         const totalActual = Object.values(asignacionesBolsillos).reduce((sum, m) => sum + m, 0);
-                                        if (totalActual + monto > balance) {
+                                        if (totalActual + monto > totalGanancias) {
                                           Alert.alert('❌ No alcanza', 'Saldo insuficiente.');
                                           return;
                                         }
@@ -1081,7 +1224,7 @@ export default function ReportesScreen() {
 
                                   // Validar balance
                                   const totalActual = Object.values(asignacionesBolsillos).reduce((sum, m) => sum + m, 0);
-                                  if (totalActual + monto > balance) {
+                                  if (totalActual + monto > totalGanancias) {
                                     Alert.alert('❌ No alcanza', 'No tienes suficiente saldo disponible.');
                                     return;
                                   }
@@ -1150,6 +1293,71 @@ export default function ReportesScreen() {
           </ThemedView>
         </KeyboardAvoidingView>
       </Modal >
+
+      {/* Modal de Historial de Caja */}
+      <Modal
+        visible={historialCajaVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setHistorialCajaVisible(false)}
+      >
+        <ThemedView style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <ThemedView style={{
+            backgroundColor: '#FFF',
+            height: '80%',
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            padding: 20
+          }}>
+            <ThemedView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <View>
+                <ThemedText type="subtitle" style={{ color: '#333' }}>Historial del Período</ThemedText>
+                <ThemedText style={{ fontSize: 12, color: '#666' }}>
+                  {rangoSeleccionado.inicioDia.toLocaleDateString()} - {rangoSeleccionado.finDia.toLocaleDateString()}
+                </ThemedText>
+              </View>
+              <TouchableOpacity onPress={() => setHistorialCajaVisible(false)}>
+                <IconSymbol name="xmark.circle.fill" size={28} color="#CCC" />
+              </TouchableOpacity>
+            </ThemedView>
+
+            <ScrollView>
+              {cargandoHistorial ? (
+                <ActivityIndicator size="large" color="#FF8C00" style={{ marginTop: 50 }} />
+              ) : transaccionesCaja.length === 0 ? (
+                <ThemedText style={{ textAlign: 'center', color: '#888', marginTop: 50 }}>
+                  No hay movimientos en este período.
+                </ThemedText>
+              ) : (
+                transaccionesCaja.map((tx) => (
+                  <ThemedView key={tx.id} style={{
+                    padding: 15,
+                    backgroundColor: '#F9F9F9',
+                    borderRadius: 10,
+                    marginBottom: 10
+                  }}>
+                    <ThemedView style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <ThemedView style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {!tx.bolsillos && <IconSymbol name="trash" size={14} color="#999" />}
+                        <ThemedText style={{ fontWeight: 'bold', color: tx.bolsillos ? '#555' : '#999', fontStyle: tx.bolsillos ? 'normal' : 'italic' }}>
+                          {tx.bolsillos?.nombre || 'Bolsillo Eliminado'}
+                        </ThemedText>
+                      </ThemedView>
+                      <ThemedText style={{ color: tx.monto >= 0 ? '#3CB371' : '#FF3B30', fontWeight: 'bold' }}>
+                        {tx.monto >= 0 ? '+' : ''}{parseInt(tx.monto).toLocaleString('es-CO')}
+                      </ThemedText>
+                    </ThemedView>
+                    <ThemedText style={{ color: '#333', marginTop: 5 }}>{tx.concepto}</ThemedText>
+                    <ThemedText style={{ color: '#999', fontSize: 12, marginTop: 5 }}>
+                      {new Date(tx.created_at).toLocaleString()}
+                    </ThemedText>
+                  </ThemedView>
+                ))
+              )}
+            </ScrollView>
+          </ThemedView>
+        </ThemedView>
+      </Modal>
 
       {/* Modal de Calendario */}
       < CalendarioRango
@@ -2022,7 +2230,7 @@ const styles = StyleSheet.create({
   balanceDisponibleValor: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FF8C00',
+    color: '#28A745',
   },
   bolsilloItem: {
     marginBottom: 12,

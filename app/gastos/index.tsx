@@ -79,7 +79,6 @@ export default function GastosScreen() {
         const { data, error } = await supabase
             .from('bolsillos')
             .select('id, nombre, saldo')
-            .neq('nombre', 'Ganancias') // Excluir Ganancias
             .order('nombre');
         if (data) setBolsillos(data as any[]); // Tipado rápido
     };

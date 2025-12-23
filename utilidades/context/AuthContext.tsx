@@ -17,9 +17,9 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType>({
   usuario: null,
-  login: async () => {},
-  logout: async () => {},
-  refreshUser: async () => {},
+  login: async () => { },
+  logout: async () => { },
+  refreshUser: async () => { },
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -43,10 +43,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const data = await AsyncStorage.getItem('usuario');
       if (data) {
         const parsed = JSON.parse(data);
-        //console.log('🔹 Usuario cargado de AsyncStorage:', parsed);
+
         setUsuario(parsed);
       } else {
-        console.log(' No hay usuario guardado, usando Mesero por defecto');
+
         await AsyncStorage.setItem('usuario', JSON.stringify(meseroDefault));
         setUsuario(meseroDefault);
       }
@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const login = async (userData: Usuario) => {
     if (!userData) return;
     try {
-      //console.log(' Guardando usuario en AsyncStorage:', userData);
+
       await AsyncStorage.setItem('usuario', JSON.stringify(userData));
       await AsyncStorage.setItem('refreshTabs', '1');
       setUsuario(userData);
@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Logout
   const logout = async () => {
     try {
-      console.log('🚪 Cerrando sesión...');
+
       await AsyncStorage.removeItem('usuario');
       await AsyncStorage.setItem('refreshTabs', '1');
       await AsyncStorage.setItem('usuario', JSON.stringify(meseroDefault));

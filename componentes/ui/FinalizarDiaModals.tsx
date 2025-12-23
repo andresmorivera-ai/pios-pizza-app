@@ -80,7 +80,7 @@ export function FinalizarDiaModals({
     const handleGuardarAhorro = () => {
         const ahorro = parseFloat(montoAhorro.replace(/[^0-9]/g, '') || '0');
         if (ahorro > 0 && ahorro <= balance) {
-            console.log('Ahorro guardado:', ahorro);
+
             handleCerrarResumen();
         }
     };

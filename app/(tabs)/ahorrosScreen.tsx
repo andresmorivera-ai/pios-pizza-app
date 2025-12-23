@@ -181,6 +181,11 @@ export default function AhorrosScreen() {
     const [isGlobalHistoryVisible, setGlobalHistoryVisible] = useState(false);
     const [globalTransactions, setGlobalTransactions] = useState<any[]>([]);
 
+    // Estados para Distribución de Ganancias
+    const [isTransferModalVisible, setTransferModalVisible] = useState(false);
+    const [transferTargetId, setTransferTargetId] = useState<number | 'new' | null>(null);
+    const [newPocketNameForTransfer, setNewPocketNameForTransfer] = useState('');
+
     // Filtrar bolsillo "Ganancias" para mostrarlo de manera especial
     const bolsilloGanancias = useMemo(() => {
         return bolsillos.find(b => b.nombre === 'Ganancias');
@@ -262,21 +267,63 @@ export default function AhorrosScreen() {
     const fetchGlobalWithdrawals = async () => {
         setLoadingTransactions(true);
         try {
-            // Buscamos transacciones donde el monto sea negativo (retiros/gastos)
-            // Opcional: Podríamos filtrar por concepto 'Gasto' si quisiéramos ser más específicos
-            const { data, error } = await supabase
+            // 1. Fetch Transacciones (Movimientos, distribuciones, etc)
+            const { data: transaccionesData, error: txError } = await supabase
                 .from('bolsillos_transacciones')
                 .select('*, bolsillos(nombre)')
-                .lt('monto', 0) // Menor a 0 (Retiros/Gastos)
                 .order('created_at', { ascending: false })
-                .limit(50);
+                .limit(500);
 
-            if (error) throw error;
-            setGlobalTransactions(data || []);
+            if (txError) throw txError;
+
+            // 2. Fetch Gastos (Histórico de gastos puros)
+            // Traemos 'bolsillo_id' para poder unir con nombre, pero la tabla 'gastos' tiene 'bolsillo_id'
+            // Nota: 'gastos' no tiene relación directa configurada en cliente quizás, hacemos join manual o select
+            const { data: gastosData, error: gastosError } = await supabase
+                .from('gastos')
+                .select(`
+                    id,
+                    created_at:fecha, 
+                    valor, 
+                    concepto, 
+                    nombre,
+                    bolsillo_id,
+                    bolsillos(nombre)
+                `)
+                .order('fecha', { ascending: false })
+                .limit(500);
+
+            if (gastosError) throw gastosError;
+
+            // 3. Procesar y Unificar
+
+            // a) Transacciones: Filtramos aquellas que sean "Gasto: ..." para evitar duplicados visuales
+            //    si ya vamos a mostrar el registro original de la tabla 'gastos'.
+            //    PERO, puede que haya transacciones que no estén en la tabla gastos (antiguas).
+            //    Estrategia: Si tiene prefijo "Gasto:", asumimos que existe en tabla gastos y lo ocultamos de aquí.
+            const transaccionesFiltradas = (transaccionesData || []).filter(tx =>
+                !tx.concepto?.startsWith('Gasto: ')
+            );
+
+            // b) Gastos: Los convertimos al formato de transacción visual
+            const gastosFormateados = (gastosData || []).map(g => ({
+                id: `gasto_${g.id}`, // ID único virtual
+                created_at: g.created_at || new Date().toISOString(),
+                monto: -Math.abs(g.valor), // Siempre negativo
+                concepto: `Gasto: ${g.nombre} ${g.concepto && g.concepto !== 'Sin descripción' ? `(${g.concepto})` : ''}`,
+                bolsillos: g.bolsillos // Objeto { nombre: ... }
+            }));
+
+            // 4. Unir y Ordenar
+            const listaUnificada = [...transaccionesFiltradas, ...gastosFormateados].sort((a, b) => {
+                return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            });
+
+            setGlobalTransactions(listaUnificada as any);
             setGlobalHistoryVisible(true);
         } catch (error) {
             console.error('Error cargando historial global:', error);
-            Alert.alert('Error', 'No se pudo cargar el historial.');
+            Alert.alert('Error', 'No se pudo cargar el historial completo.');
         } finally {
             setLoadingTransactions(false);
         }
@@ -688,6 +735,110 @@ export default function AhorrosScreen() {
         setConcept('');
     };
 
+    const handleDistributeProfits = async () => {
+        if (!selectedPocket || selectedPocket.nombre !== 'Ganancias') return;
+        if (amount <= 0) {
+            Alert.alert('Error', 'Ingresa un monto válido.');
+            return;
+        }
+
+        if (amount > selectedPocket.saldo) {
+            Alert.alert('Saldo Insuficiente', 'No tienes suficientes ganancias para distribuir esa cantidad.');
+            return;
+        }
+
+        if (!transferTargetId) {
+            Alert.alert('Selección Requerida', 'Elige un bolsillo destino o crea uno nuevo.');
+            return;
+        }
+
+        let targetId = transferTargetId;
+        let targetName = '';
+
+        setCargando(true);
+        try {
+            // 1. Si es nuevo bolsillo, crearlo
+            if (targetId === 'new') {
+                if (!newPocketNameForTransfer.trim()) {
+                    Alert.alert('Error', 'Ingresa un nombre para el nuevo bolsillo.');
+                    setCargando(false);
+                    return;
+                }
+                const { data: newPocket, error: createError } = await supabase
+                    .from('bolsillos')
+                    .insert([{ nombre: newPocketNameForTransfer.trim(), saldo: 0 }])
+                    .select()
+                    .single();
+
+                if (createError) throw createError;
+                targetId = newPocket.id;
+                targetName = newPocket.nombre;
+            } else {
+                const targetPocket = bolsillos.find(b => b.id === targetId);
+                if (!targetPocket) throw new Error('Bolsillo destino no encontrado');
+                targetName = targetPocket.nombre;
+            }
+
+            // 2. Descontar de Ganancias
+            const newGananciasBalance = selectedPocket.saldo - amount;
+            const { error: updateGananciasError } = await supabase
+                .from('bolsillos')
+                .update({ saldo: newGananciasBalance })
+                .eq('id', selectedPocket.id);
+
+            if (updateGananciasError) throw updateGananciasError;
+
+            // 3. Sumar al Destino
+            // Necesitamos el saldo actual del destino fresco
+            const { data: targetData, error: targetFetchError } = await supabase
+                .from('bolsillos')
+                .select('saldo')
+                .eq('id', targetId)
+                .single();
+
+            if (targetFetchError) throw targetFetchError;
+
+            const newTargetBalance = targetData.saldo + amount;
+            const { error: updateTargetError } = await supabase
+                .from('bolsillos')
+                .update({ saldo: newTargetBalance })
+                .eq('id', targetId);
+
+            if (updateTargetError) throw updateTargetError;
+
+
+            // 4. Logs
+            await logTransaction(selectedPocket.id, -amount, `Distribución a ${targetName} `);
+            await logTransaction(targetId as number, amount, `Fondos desde Ganancias`);
+
+            Alert.alert('¡Excelente!', `Has distribuido ${formatCOP(amount)} a ${targetName} `);
+
+            // Limpieza y REFRESCO
+            setTransferModalVisible(false);
+            // setDetailModalVisible(false); // NO CERRAR el detalle principal
+            setAmount(0);
+            setAmountFormatted('');
+            setTransferTargetId(null);
+            setNewPocketNameForTransfer('');
+
+            // Recargar datos y también historial específico de ganancias
+            await fetchBolsillos();
+            if (selectedPocket) {
+                // Actualizar el saldo visualmente en el modal abierto
+                // fetchBolsillos lo hará, pero necesitamos actualizar 'selectedPocket'
+                // El hook handleRealtimeUpdate debería encargarse, pero por seguridad:
+                // Re-fetch transactions
+                fetchTransactions(selectedPocket.id);
+            }
+
+        } catch (e: any) {
+            console.error(e);
+            Alert.alert('Error', e.message);
+        } finally {
+            setCargando(false);
+        }
+    };
+
     // --- Componentes de Renderizado ---
 
     // BolsilloCard Actualizada (Solo visual, al tocar abre detalle)
@@ -764,7 +915,7 @@ export default function AhorrosScreen() {
                             onPress={() => fetchGlobalWithdrawals()}
                         >
                             <IconSymbol name="list.bullet.rectangle.fill" size={20} color="#555" />
-                            <ThemedText style={{ marginLeft: 8, color: '#333', fontWeight: 'bold' }}>Ver Movimientos (Gastos)</ThemedText>
+                            <ThemedText style={{ marginLeft: 8, color: '#333', fontWeight: 'bold' }}>Ver movimientos</ThemedText>
                         </TouchableOpacity>
                         {bolsillosNormales.map((bolsillo) => (
                             <BolsilloCard key={bolsillo.id} bolsillo={bolsillo} />
@@ -900,7 +1051,7 @@ export default function AhorrosScreen() {
                                 </ThemedText>
                                 <ThemedText style={{ color: '#FFF', fontSize: 30, fontWeight: '900' }}>
                                     {isCreatingPocket
-                                        ? (editingPocketBalance ? `$${editingPocketBalance}` : '$0')
+                                        ? (editingPocketBalance ? `$${editingPocketBalance} ` : '$0')
                                         : (selectedPocket ? formatCOP(selectedPocket.saldo) : '$0')
                                     }
                                 </ThemedText>
@@ -1038,23 +1189,50 @@ export default function AhorrosScreen() {
                                 backgroundColor: '#FFF',
                                 borderTopWidth: 1,
                                 borderTopColor: '#EEE',
-                                marginBottom: insets.bottom
+                                marginBottom: insets.bottom,
+                                flexDirection: 'row',
+                                gap: 10
                             }}>
                                 <TouchableOpacity
                                     style={{
-                                        backgroundColor: '#34C759', // Verde Claro para Editar
+                                        flex: 1,
+                                        backgroundColor: '#FFB900', // Dorado/Amarillo para Ganancias
                                         paddingVertical: 15,
                                         borderRadius: 15,
                                         alignItems: 'center',
-                                        shadowColor: "#34C759",
+                                        shadowColor: "#FFB900",
                                         shadowOffset: { width: 0, height: 4 },
                                         shadowOpacity: 0.3,
                                         shadowRadius: 5,
-                                        elevation: 6
+                                        elevation: 6,
+                                        flexDirection: 'row',
+                                        justifyContent: 'center',
+                                        gap: 8
                                     }}
-                                    onPress={() => setDetailModalVisible(false)} // Just close for Ganancias
+                                    onPress={() => {
+                                        setAmount(0);
+                                        setAmountFormatted('');
+                                        setTransferTargetId(null);
+                                        setTransferModalVisible(true);
+                                    }}
                                 >
-                                    <ThemedText style={{ color: '#FFF', fontSize: 18, fontWeight: 'bold' }}>
+                                    <IconSymbol name="gift.fill" size={20} color="#FFF" />
+                                    <ThemedText style={{ color: '#FFF', fontSize: 16, fontWeight: 'bold' }}>
+                                        Retirar / Distribuir
+                                    </ThemedText>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={{
+                                        paddingVertical: 15,
+                                        paddingHorizontal: 20,
+                                        borderRadius: 15,
+                                        alignItems: 'center',
+                                        backgroundColor: '#EEE'
+                                    }}
+                                    onPress={() => setDetailModalVisible(false)}
+                                >
+                                    <ThemedText style={{ color: '#555', fontSize: 16, fontWeight: 'bold' }}>
                                         Cerrar
                                     </ThemedText>
                                 </TouchableOpacity>
@@ -1080,7 +1258,7 @@ export default function AhorrosScreen() {
                     padding: 20
                 }}>
                     <ThemedView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                        <ThemedText type="subtitle" style={{ color: '#333' }}>Historial de Gastos/Retiros</ThemedText>
+                        <ThemedText type="subtitle" style={{ color: '#333' }}>Historial Completo de Movimientos</ThemedText>
                         <TouchableOpacity onPress={() => setGlobalHistoryVisible(false)}>
                             <IconSymbol name="xmark.circle.fill" size={28} color="#CCC" />
                         </TouchableOpacity>
@@ -1100,11 +1278,14 @@ export default function AhorrosScreen() {
                                     marginBottom: 10
                                 }}>
                                     <ThemedView style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                        <ThemedText style={{ fontWeight: 'bold', color: '#555' }}>
-                                            {tx.bolsillos?.nombre || 'Bolsillo'}
-                                        </ThemedText>
-                                        <ThemedText style={{ color: '#FF3B30', fontWeight: 'bold' }}>
-                                            {formatCOP(tx.monto, 0)}
+                                        <ThemedView style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                            {!tx.bolsillos && <IconSymbol name="trash" size={14} color="#999" />}
+                                            <ThemedText style={{ fontWeight: 'bold', color: tx.bolsillos ? '#555' : '#999', fontStyle: tx.bolsillos ? 'normal' : 'italic' }}>
+                                                {tx.bolsillos?.nombre || 'Bolsillo Eliminado'}
+                                            </ThemedText>
+                                        </ThemedView>
+                                        <ThemedText style={{ color: tx.monto >= 0 ? '#3CB371' : '#FF3B30', fontWeight: 'bold' }}>
+                                            {tx.monto >= 0 ? '+' : ''}{formatCOP(tx.monto, 0)}
                                         </ThemedText>
                                     </ThemedView>
                                     <ThemedText style={{ color: '#333', marginTop: 5 }}>{tx.concepto}</ThemedText>
@@ -1115,6 +1296,142 @@ export default function AhorrosScreen() {
                             ))
                         )}
                     </ScrollView>
+                </ThemedView>
+            </Modal>
+
+            {/* MODAL DE DISTRIBUCIÓN DE GANANCIAS */}
+            <Modal
+                isVisible={isTransferModalVisible}
+                onBackdropPress={() => setTransferModalVisible(false)}
+                style={{ margin: 0, justifyContent: 'flex-end' }}
+                avoidKeyboard={true}
+            >
+                <ThemedView style={{
+                    backgroundColor: '#FFF',
+                    borderTopLeftRadius: 25,
+                    borderTopRightRadius: 25,
+                    padding: 25,
+                    paddingBottom: Math.max(insets.bottom + 20, 30)
+                }}>
+                    <ThemedView style={{ alignItems: 'center', marginBottom: 20 }}>
+                        <IconSymbol name="sparkles" size={40} color="#FFB900" />
+                        <ThemedText type="subtitle" style={{ color: '#333', marginTop: 10, textAlign: 'center' }}>
+                            ¡Disfruta tus logros!
+                        </ThemedText>
+                        <ThemedText style={{ color: '#666', textAlign: 'center' }}>
+                            Distribuye tus ganancias a un bolsillo existente o crea uno nuevo para tu meta.
+                        </ThemedText>
+                    </ThemedView>
+
+                    <ThemedText style={styles.pickerLabel}>¿Cuánto deseas mover?</ThemedText>
+                    <ThemedView style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 1,
+                        borderColor: '#E0E0E0',
+                        borderRadius: 12,
+                        paddingHorizontal: 15,
+                        marginBottom: 20,
+                        backgroundColor: '#F9F9F9'
+                    }}>
+                        <ThemedText style={{ fontSize: 24, fontWeight: 'bold', color: '#333', marginRight: 5 }}>$</ThemedText>
+                        <TextInput
+                            style={{ flex: 1, height: 50, fontSize: 24, fontWeight: 'bold', color: '#333', textAlign: 'center' }}
+                            placeholder="0"
+                            placeholderTextColor="#CCC"
+                            keyboardType="numeric"
+                            value={amountFormatted}
+                            onChangeText={handleAmountChange}
+                        />
+                    </ThemedView>
+
+                    <ThemedText style={styles.pickerLabel}>¿A dónde va el dinero?</ThemedText>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+                        <TouchableOpacity
+                            onPress={() => setTransferTargetId('new')}
+                            style={{
+                                alignItems: 'center',
+                                marginRight: 15,
+                                opacity: transferTargetId === 'new' ? 1 : 0.8
+                            }}
+                        >
+                            <ThemedView style={{
+                                width: 60,
+                                height: 60,
+                                borderRadius: 20, // Más cuadrado pero suave
+                                backgroundColor: transferTargetId === 'new' ? '#1E90FF' : '#E3F2FD', // Fondo azul claro siempre
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                marginBottom: 5,
+                                borderWidth: 2,
+                                borderColor: transferTargetId === 'new' ? '#1E90FF' : '#64B5F6',
+                                borderStyle: 'dashed', // Siempre dashed para evocar "espacio vacío"
+                                shadowColor: "#1E90FF",
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: transferTargetId === 'new' ? 0.4 : 0.1,
+                                shadowRadius: 3,
+                                elevation: transferTargetId === 'new' ? 4 : 1
+                            }}>
+                                <IconSymbol name="plus" size={30} color={transferTargetId === 'new' ? '#FFF' : '#1E90FF'} />
+                            </ThemedView>
+                            <ThemedText style={{ fontSize: 12, fontWeight: 'bold', color: '#333' }}>Nuevo</ThemedText>
+                        </TouchableOpacity>
+
+                        {bolsillosNormales.map(b => (
+                            <TouchableOpacity
+                                key={b.id}
+                                onPress={() => setTransferTargetId(b.id)}
+                                style={{
+                                    alignItems: 'center',
+                                    marginRight: 15,
+                                    opacity: transferTargetId === b.id ? 1 : 0.6
+                                }}
+                            >
+                                <ThemedView style={{
+                                    width: 60,
+                                    height: 60,
+                                    borderRadius: 30,
+                                    backgroundColor: transferTargetId === b.id ? '#3CB371' : '#EEE',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    marginBottom: 5
+                                }}>
+                                    <ThemedText style={{ fontSize: 20 }}>💰</ThemedText>
+                                </ThemedView>
+                                <ThemedText numberOfLines={1} style={{ fontSize: 12, fontWeight: 'bold', width: 60, textAlign: 'center', color: '#333' }}>
+                                    {b.nombre}
+                                </ThemedText>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+
+                    {transferTargetId === 'new' && (
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Nombre del nuevo bolsillo"
+                            value={newPocketNameForTransfer}
+                            onChangeText={setNewPocketNameForTransfer}
+                        />
+                    )}
+
+                    <TouchableOpacity
+                        style={[
+                            styles.button,
+                            styles.createPocketButton,
+                            { backgroundColor: '#FFB900', marginTop: 10 },
+                            (amount <= 0 || !transferTargetId) && styles.disabledButton
+                        ]}
+                        onPress={handleDistributeProfits}
+                        disabled={amount <= 0 || !transferTargetId || cargando}
+                    >
+                        {cargando ? (
+                            <ActivityIndicator color="#FFF" />
+                        ) : (
+                            <ThemedText style={styles.buttonText}>Confirmar Distribución</ThemedText>
+                        )}
+                    </TouchableOpacity>
+
                 </ThemedView>
             </Modal>
         </ThemedView>

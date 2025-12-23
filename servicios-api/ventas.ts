@@ -55,23 +55,23 @@ export async function generarIdVenta(): Promise<string> {
     const dia = hoy.getDate().toString().padStart(2, '0');
     const mes = (hoy.getMonth() + 1).toString().padStart(2, '0');
     const fechaString = dia + mes; // Ejemplo: "2410"
-    
+
     // Obtener el inicio y fin del día actual
     const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
     const finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
-    
+
     // Contar ventas del día actual
     const { data: ventasHoy, error } = await supabase
       .from('ventas')
       .select('id_venta')
       .gte('fecha_hora', inicioDia.toISOString())
       .lt('fecha_hora', finDia.toISOString());
-    
+
     if (error) {
       logError('Error obteniendo ventas del día', error);
       throw error;
     }
-    
+
     // Encontrar el siguiente número
     const numerosHoy = ventasHoy
       ?.map(v => {
@@ -80,9 +80,9 @@ export async function generarIdVenta(): Promise<string> {
         return parseInt(numeroStr);
       })
       .filter(n => !isNaN(n)) || [];
-    
+
     const siguienteNumero = Math.max(0, ...numerosHoy) + 1;
-    
+
     return fechaString + siguienteNumero.toString().padStart(3, '0');
   } catch (error) {
     logError('Error generando ID de venta', error);
@@ -97,9 +97,9 @@ export async function guardarVenta(ventaData: VentaData): Promise<{ venta: any; 
   try {
     // Generar ID único
     const idVenta = await generarIdVenta();
-    
-    console.log('Guardando venta con ID:', idVenta);
-    
+
+
+
     // Insertar la venta principal
     const { data: venta, error: ventaError } = await supabase
       .from('ventas')
@@ -138,7 +138,7 @@ export async function guardarVenta(ventaData: VentaData): Promise<{ venta: any; 
       throw productosError;
     }
 
-    console.log('Venta guardada exitosamente:', idVenta);
+
     return { venta, idVenta };
   } catch (error) {
     logError('Error guardando venta', error);
@@ -150,7 +150,7 @@ export async function guardarVenta(ventaData: VentaData): Promise<{ venta: any; 
  * Obtiene el historial de ventas con filtros opcionales
  */
 export async function obtenerHistorialVentas(
-  fechaInicio?: string, 
+  fechaInicio?: string,
   fechaFin?: string,
   mesa?: string
 ): Promise<VentaCompleta[]> {
@@ -186,24 +186,24 @@ export async function obtenerHistorialVentas(
     }
 
     const { data, error } = await query;
-    
+
     if (error) {
       logError('❌ Error obteniendo historial', error);
       throw error;
     }
 
-    console.log('📦 Datos obtenidos de Supabase:', data?.length || 0);
+
     if (data && data.length > 0) {
-      console.log('📦 Primera venta:', JSON.stringify(data[0], null, 2));
+
     }
 
     // Transformar los datos para que sean más fáciles de usar
     const ventasCompletas: VentaCompleta[] = data?.map(venta => {
       // Verificar si venta_productos es un array o está anidado
-      const productosRaw = Array.isArray(venta.venta_productos) 
-        ? venta.venta_productos 
+      const productosRaw = Array.isArray(venta.venta_productos)
+        ? venta.venta_productos
         : [];
-      
+
       // Transformar productos de Supabase al formato ProductoVenta
       const productos: ProductoVenta[] = productosRaw.map((p: any) => ({
         nombre: p.producto_nombre || p.nombre || '',
@@ -211,7 +211,7 @@ export async function obtenerHistorialVentas(
         precioUnitario: p.precio_unitario || p.precioUnitario || 0,
         subtotal: p.subtotal || (p.precio_unitario || p.precioUnitario || 0) * (p.cantidad || 0),
       }));
-      
+
       return {
         id: venta.id,
         id_venta: venta.id_venta,
@@ -224,7 +224,7 @@ export async function obtenerHistorialVentas(
       };
     }) || [];
 
-    console.log('✅ Ventas transformadas:', ventasCompletas.length);
+
     return ventasCompletas;
   } catch (error) {
     logError('Error obteniendo historial de ventas', error);
@@ -249,7 +249,7 @@ export async function obtenerEstadisticasVentas(fechaInicio?: string, fechaFin?:
     }
 
     const { data, error } = await query;
-    
+
     if (error) {
       logError('Error obteniendo estadísticas', error);
       throw error;
@@ -282,7 +282,7 @@ export interface VentasPorMetodoPago {
 }
 
 export async function obtenerVentasPorMetodoPago(
-  fechaInicio?: string, 
+  fechaInicio?: string,
   fechaFin?: string
 ): Promise<{ ventas: VentasPorMetodoPago[]; totalGeneral: number }> {
   try {
@@ -299,7 +299,7 @@ export async function obtenerVentasPorMetodoPago(
     }
 
     const { data, error } = await query;
-    
+
     if (error) {
       logError('Error obteniendo ventas por método de pago', error);
       throw error;
@@ -310,7 +310,7 @@ export async function obtenerVentasPorMetodoPago(
 
     // Agrupar por método de pago
     const ventasPorMetodo: Record<string, { total: number; cantidad: number }> = {};
-    
+
     data?.forEach(venta => {
       const metodo = venta.metodo_pago || 'desconocido';
       if (!ventasPorMetodo[metodo]) {

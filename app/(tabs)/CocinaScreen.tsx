@@ -37,12 +37,34 @@ export default function CocinaScreen() {
     }, [])
   );
 
+  const [width, setWidth] = useState(Dimensions.get('window').width);
+
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setWidth(window.width);
+    });
+    return () => subscription.remove();
+  }, []);
+
   const { ordenes, actualizarEstadoOrden } = useOrdenes();
   const { logout } = useAuth();
   const [ordenExpandida, setOrdenExpandida] = useState<string | null>(null);
   const [ordenesGenerales, setOrdenesGenerales] = useState<OrdenGeneral[]>([]);
   const [ordenesVisibles, setOrdenesVisibles] = useState<OrdenUnificada[]>([]);
   const [cargandoGenerales, setCargandoGenerales] = useState(false);
+
+  const getCardStyle = () => {
+    if (width > 1024) {
+      // Landscape Tablet / Desktop -> 3 columnas ~32%
+      return { width: '32%' as any };
+    } else if (width > 600) {
+      // Portrait Tablet -> 2 columnas ~48%
+      return { width: '48%' as any };
+    } else {
+      // Mobile -> 1 columna
+      return { width: '100%' as any };
+    }
+  };
 
   // Función para cargar órdenes generales
   const cargarOrdenesGenerales = async () => {
@@ -284,7 +306,7 @@ export default function CocinaScreen() {
                   key={orden.id}
                   activeOpacity={0.9}
                   onPress={() => handleExpandirOrden(orden)}
-                  style={[styles.ordenCard, expandida && styles.ordenExpandida]}
+                  style={[styles.ordenCard, getCardStyle(), expandida && styles.ordenExpandida]}
                 >
                   {/* Encabezado */}
                   <View style={styles.ordenHeader}>
@@ -434,7 +456,6 @@ const styles = StyleSheet.create({
     gap: Layout.spacing.m,
   },
   ordenCard: {
-    width: Layout.isTablet ? '31%' : '100%',
     backgroundColor: '#fff',
     borderRadius: Layout.borderRadius.xl,
     padding: Layout.spacing.m,
