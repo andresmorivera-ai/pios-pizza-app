@@ -8,7 +8,7 @@ import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, BackHandler, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, BackHandler, Dimensions, ScaledSize, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 // Interfaz para órdenes generales (de la base de datos)
 interface OrdenGeneral {
@@ -40,7 +40,7 @@ export default function CocinaScreen() {
   const [width, setWidth] = useState(Dimensions.get('window').width);
 
   useEffect(() => {
-    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+    const subscription = Dimensions.addEventListener('change', ({ window }: { window: ScaledSize }) => {
       setWidth(window.width);
     });
     return () => subscription.remove();
