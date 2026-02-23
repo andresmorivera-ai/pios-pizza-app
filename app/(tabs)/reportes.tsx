@@ -4,7 +4,7 @@ import { CalendarioRango } from '@/componentes/ui/CalendarioRango';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { supabase } from '@/scripts/lib/supabase';
 import { obtenerHistorialVentas, VentaCompleta } from '@/servicios-api/ventas';
-import { useOrdenes } from '@/utilidades/context/OrdenesContext';
+import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -76,7 +76,7 @@ export default function ReportesScreen() {
   const [resumenVisible, setResumenVisible] = useState(false);
   const [montoAhorrar, setMontoAhorrar] = useState(0);
   const [bolsillos, setBolsillos] = useState<any[]>([]);
-  const [asignacionesBolsillos, setAsignacionesBolsillos] = useState<Record<number, number>>({}); // bolsilloId -> monto
+  const [asignacionesBolsillos, setAsignacionesBolsillos] = useState<Record<string, number>>({}); // bolsilloId -> monto
   const [bolsilloEditando, setBolsilloEditando] = useState<number | null>(null);
   const [montoTemporal, setMontoTemporal] = useState('');
   const [creandoNuevoBolsillo, setCreandoNuevoBolsillo] = useState(false);
@@ -296,7 +296,7 @@ export default function ReportesScreen() {
   const productosParaContar = ventasComoOrdenes.length > 0 ? ventasComoOrdenes : ordenesEntregadas;
   const productosCount: Record<string, number> = {};
   productosParaContar.forEach(orden => {
-    orden.productos.forEach(producto => {
+    orden.productos.forEach((producto: string) => {
       productosCount[producto] = (productosCount[producto] || 0) + 1;
     });
   });
@@ -640,33 +640,33 @@ export default function ReportesScreen() {
   };
 
   const checkStatusDia = async () => {
-    if (!esHoyRange) {
-      // Si no es hoy, no bloqueamos el botón "estrictamente" por estado, 
-      // pero la UI ya lo oculta. 
-      // Sin embargo, si quisiéramos ver si ESE día histórico se cerró:
-      // setIsDayFinalized(true/false) based on query.
-      // Por ahora, el usuario pide consistencia para "Hoy".
-      // Aún así, es bueno chequear si ya hay movimientos de cierre en este rango.
-    }
-
     try {
       const inicio = rangoSeleccionado.inicioDia.toISOString();
       const fin = rangoSeleccionado.finDia.toISOString();
 
-      // Buscamos si existe alguna transacción de "Cierre" en este rango
-      // Conceptos clave: "Ahorro Cierre de Día" OR "Ganancias día..."
+      // La app guarda el concepto como "Ganancias día 21/02/2026"
+      // Vamos a buscar la fecha basándonos en el día de inicio seleccionado
+      const fechaCierre = rangoSeleccionado.inicioDia.toLocaleDateString('es-ES');
+      const conceptoGanancias = `Ganancias día ${fechaCierre}`;
+
+      console.log('[REPORTE] Buscando cierre para:', inicio, '-', fin);
+      console.log('[REPORTE] Buscando concepto exacto:', conceptoGanancias);
+
+      // Buscamos si existe la transacción de cierre EXACTA de este día
       const { data, error } = await supabase
         .from('bolsillos_transacciones')
-        .select('id, concepto')
+        .select('id, concepto, created_at')
         .gte('created_at', inicio)
         .lte('created_at', fin)
-        .or('concepto.eq.Ahorro Cierre de Día,concepto.ilike.Ganancias día%')
+        .or(`concepto.eq.Ahorro Cierre de Día,concepto.eq.${conceptoGanancias}`)
         .limit(1);
 
       if (error) {
         console.error('Error verificando status dia:', error);
         return;
       }
+
+      console.log('[REPORTE] Data encontrada de cierre:', data);
 
       if (data && data.length > 0) {
         setIsDayFinalized(true);
@@ -897,7 +897,7 @@ export default function ReportesScreen() {
             </ThemedView>
           ) : ordenesParaMostrar.length > 0 ? (
             <ThemedView style={styles.ordenesEntregadasLista}>
-              {ordenesParaMostrar.slice().reverse().map((orden) => (
+              {ordenesParaMostrar.map((orden) => (
                 <View key={orden.id}>
                   {renderOrdenEntregada(orden)}
                 </View>
@@ -924,7 +924,8 @@ export default function ReportesScreen() {
         visible={confirmacionVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setConfirmacionVisible(false)}
+        onRequestClose={() => setConfirmacionVisible(false)
+        }
       >
         <ThemedView style={styles.modalOverlay}>
           <ThemedView style={styles.confirmacionModal}>
@@ -1295,7 +1296,7 @@ export default function ReportesScreen() {
       </Modal >
 
       {/* Modal de Historial de Caja */}
-      <Modal
+      < Modal
         visible={historialCajaVisible}
         transparent
         animationType="slide"
@@ -1357,7 +1358,7 @@ export default function ReportesScreen() {
             </ScrollView>
           </ThemedView>
         </ThemedView>
-      </Modal>
+      </Modal >
 
       {/* Modal de Calendario */}
       < CalendarioRango

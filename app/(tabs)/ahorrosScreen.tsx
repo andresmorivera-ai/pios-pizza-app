@@ -1252,46 +1252,139 @@ export default function AhorrosScreen() {
             >
                 <ThemedView style={{
                     backgroundColor: '#FFF',
-                    height: '80%',
-                    borderTopLeftRadius: 20,
-                    borderTopRightRadius: 20,
-                    padding: 20
+                    height: '85%',
+                    borderTopLeftRadius: 30,
+                    borderTopRightRadius: 30,
+                    paddingTop: 25,
+                    paddingHorizontal: 20,
+                    overflow: 'hidden'
                 }}>
-                    <ThemedView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                        <ThemedText type="subtitle" style={{ color: '#333' }}>Historial Completo de Movimientos</ThemedText>
-                        <TouchableOpacity onPress={() => setGlobalHistoryVisible(false)}>
-                            <IconSymbol name="xmark.circle.fill" size={28} color="#CCC" />
+                    {/* Header decorativo */}
+                    <ThemedView style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 }}>
+                        <ThemedView style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                            <ThemedView style={{
+                                backgroundColor: '#E3F2FD',
+                                padding: 10,
+                                borderRadius: 12
+                            }}>
+                                <IconSymbol name="list.bullet.rectangle.fill" size={24} color="#1E90FF" />
+                            </ThemedView>
+                            <ThemedView>
+                                <ThemedText style={{ color: '#333', fontSize: 20, fontWeight: '900' }}>Movimientos</ThemedText>
+                                <ThemedText style={{ color: '#888', fontSize: 13 }}>Historial General</ThemedText>
+                            </ThemedView>
+                        </ThemedView>
+                        <TouchableOpacity
+                            onPress={() => setGlobalHistoryVisible(false)}
+                            style={{ padding: 5, backgroundColor: '#F0F0F0', borderRadius: 20 }}
+                        >
+                            <IconSymbol name="xmark" size={20} color="#555" />
                         </TouchableOpacity>
                     </ThemedView>
 
-                    <ScrollView>
+                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
                         {globalTransactions.length === 0 ? (
-                            <ThemedText style={{ textAlign: 'center', color: '#888', marginTop: 50 }}>
-                                No se encontraron gastos recientes.
-                            </ThemedText>
+                            <ThemedView style={{ alignItems: 'center', marginTop: 50 }}>
+                                <IconSymbol name="doc.text.magnifyingglass" size={50} color="#DDD" />
+                                <ThemedText style={{ textAlign: 'center', color: '#888', marginTop: 15, fontSize: 16 }}>
+                                    No hay movimientos registrados recientes.
+                                </ThemedText>
+                            </ThemedView>
                         ) : (
-                            globalTransactions.map((tx) => (
-                                <ThemedView key={tx.id} style={{
-                                    padding: 15,
-                                    backgroundColor: '#F9F9F9',
-                                    borderRadius: 10,
-                                    marginBottom: 10
-                                }}>
-                                    <ThemedView style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                        <ThemedView style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                            {!tx.bolsillos && <IconSymbol name="trash" size={14} color="#999" />}
-                                            <ThemedText style={{ fontWeight: 'bold', color: tx.bolsillos ? '#555' : '#999', fontStyle: tx.bolsillos ? 'normal' : 'italic' }}>
-                                                {tx.bolsillos?.nombre || 'Bolsillo Eliminado'}
-                                            </ThemedText>
-                                        </ThemedView>
-                                        <ThemedText style={{ color: tx.monto >= 0 ? '#3CB371' : '#FF3B30', fontWeight: 'bold' }}>
-                                            {tx.monto >= 0 ? '+' : ''}{formatCOP(tx.monto, 0)}
-                                        </ThemedText>
+                            Object.entries(
+                                globalTransactions.reduce((acc: any, tx: any) => {
+                                    const dateObj = new Date(tx.created_at);
+
+                                    // Formato de Fechas Amigable
+                                    const today = new Date();
+                                    const isToday = dateObj.getDate() === today.getDate() && dateObj.getMonth() === today.getMonth() && dateObj.getFullYear() === today.getFullYear();
+
+                                    const yesterday = new Date(today);
+                                    yesterday.setDate(yesterday.getDate() - 1);
+                                    const isYesterday = dateObj.getDate() === yesterday.getDate() && dateObj.getMonth() === yesterday.getMonth() && dateObj.getFullYear() === yesterday.getFullYear();
+
+                                    let dateLabel = dateObj.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+                                    if (isToday) dateLabel = 'Hoy';
+                                    else if (isYesterday) dateLabel = 'Ayer';
+
+                                    if (!acc[dateLabel]) acc[dateLabel] = [];
+                                    acc[dateLabel].push(tx);
+                                    return acc;
+                                }, {})
+                            ).map(([date, transactions]: [string, any]) => (
+                                <ThemedView key={date} style={{ marginBottom: 25 }}>
+                                    {/* Etiqueta de Fecha */}
+                                    <ThemedView style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                                        <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: '#A0A0A0', textTransform: 'uppercase', letterSpacing: 1 }}>{date}</ThemedText>
+                                        <ThemedView style={{ flex: 1, height: 1, backgroundColor: '#EEE', marginLeft: 15 }} />
                                     </ThemedView>
-                                    <ThemedText style={{ color: '#333', marginTop: 5 }}>{tx.concepto}</ThemedText>
-                                    <ThemedText style={{ color: '#999', fontSize: 12, marginTop: 5 }}>
-                                        {new Date(tx.created_at).toLocaleString()}
-                                    </ThemedText>
+
+                                    {/* Lista de Transacciones de ese día */}
+                                    {transactions.map((tx: any) => (
+                                        <ThemedView key={tx.id} style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            paddingVertical: 14,
+                                            paddingHorizontal: 12,
+                                            backgroundColor: '#FFF',
+                                            borderRadius: 16,
+                                            marginBottom: 10,
+                                            borderWidth: 1,
+                                            borderColor: '#F0F0F0',
+                                            shadowColor: '#000',
+                                            shadowOffset: { width: 0, height: 2 },
+                                            shadowOpacity: 0.03,
+                                            shadowRadius: 5,
+                                            elevation: 2,
+                                        }}>
+                                            {/* Icono de Tipo de Movimiento (Sutil) */}
+                                            <ThemedView style={{
+                                                width: 40,
+                                                height: 40,
+                                                borderRadius: 12,
+                                                backgroundColor: '#F7F7F7',
+                                                justifyContent: 'center',
+                                                alignItems: 'center',
+                                                marginRight: 15,
+                                                borderWidth: 1,
+                                                borderColor: '#EEE'
+                                            }}>
+                                                <IconSymbol
+                                                    name={tx.monto > 0 ? "arrow.down.to.line" : "arrow.up.right.square"}
+                                                    size={22}
+                                                    color="#888"
+                                                />
+                                            </ThemedView>
+
+                                            {/* Detalles (Medio) */}
+                                            <ThemedView style={{ flex: 1 }}>
+                                                <ThemedText style={{ fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 2 }}>
+                                                    {tx.concepto && tx.concepto.trim() !== '' ? tx.concepto : 'Movimiento'}
+                                                </ThemedText>
+
+                                                <ThemedView style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                    {!tx.bolsillos && <IconSymbol name="trash" size={12} color="#999" />}
+                                                    <ThemedText style={{ fontSize: 13, color: tx.bolsillos ? '#777' : '#AAA', fontStyle: tx.bolsillos ? 'normal' : 'italic' }}>
+                                                        {tx.bolsillos?.nombre || 'Bolsillo Eliminado'}
+                                                    </ThemedText>
+                                                </ThemedView>
+                                            </ThemedView>
+
+                                            {/* Monto (Derecha) */}
+                                            <ThemedView style={{ alignItems: 'flex-end' }}>
+                                                <ThemedText style={{
+                                                    fontSize: 16,
+                                                    fontWeight: '900',
+                                                    color: tx.monto > 0 ? '#2E7D32' : '#D32F2F'
+                                                }}>
+                                                    {tx.monto > 0 ? '+' : ''}{formatCOP(tx.monto, 0)}
+                                                </ThemedText>
+                                                <ThemedText style={{ fontSize: 11, color: '#BBB', marginTop: 2 }}>
+                                                    {new Date(tx.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                                                </ThemedText>
+                                            </ThemedView>
+                                        </ThemedView>
+                                    ))}
                                 </ThemedView>
                             ))
                         )}

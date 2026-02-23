@@ -3,9 +3,10 @@ import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
+import { useAuth } from '@/utilidades/context/AuthContext';
 import { Link, router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Modal, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const formatErrorMessage = (error: unknown) => {
@@ -63,9 +64,17 @@ export default function SeleccionarMesaScreen() {
   const [mesaSeleccionada, setMesaSeleccionada] = useState<number | null>(null);
   const [errorMesas, setErrorMesas] = useState<string | null>(null);
   const animacionesRef = useRef<{ [key: number]: Animated.Value }>({});
+  const suppressRealtimeRef = useRef(false); // suppress realtime during config saves
   const insets = useSafeAreaInsets();
+  const { usuario } = useAuth();
+  const esAdmin = usuario?.rol_id === 1;
   const handlellevar = () => router.push('/(tabs)/ordenesGenerales');
   const handleDomicilio = () => router.push('/(tabs)/DomiciliosScreen');
+
+  // --- Estado para modal de configuración de mesas ---
+  const [modalConfigVisible, setModalConfigVisible] = useState(false);
+  const [numeroMesasInput, setNumeroMesasInput] = useState('');
+  const [guardandoConfig, setGuardandoConfig] = useState(false);
 
   //  Colores según estado
   const getColorMesa = (estado: Mesa['estado'] | undefined) => {
@@ -102,7 +111,9 @@ export default function SeleccionarMesaScreen() {
       }
 
       if (data) {
-        setMesas(data);
+        // Deduplicate by id to prevent duplicate-key React warnings
+        const unique = Array.from(new Map(data.map((m: Mesa) => [m.id, m])).values());
+        setMesas(unique);
         setErrorMesas(null);
       }
     } catch (error) {
@@ -138,7 +149,13 @@ export default function SeleccionarMesaScreen() {
     const canalMesas = supabase
       .channel('mesas-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mesas' }, (payload) => {
-        if (payload.new) {
+        // Skip realtime updates while doing a config save – cargarMesas will authoratively reset state
+        if (suppressRealtimeRef.current) return;
+
+        if (payload.eventType === 'DELETE') {
+          const mesaEliminada = payload.old as Mesa;
+          setMesas((prev) => prev.filter((m) => m.id !== mesaEliminada.id));
+        } else if (payload.new) {
           const mesaActualizada = payload.new as Mesa;
           animarCambio(mesaActualizada.id);
 
@@ -147,7 +164,7 @@ export default function SeleccionarMesaScreen() {
             if (existe) {
               return prev.map((m) => (m.id === mesaActualizada.id ? mesaActualizada : m));
             } else {
-              return [...prev, mesaActualizada];
+              return [...prev, mesaActualizada].sort((a, b) => a.numero_mesa - b.numero_mesa);
             }
           });
         }
@@ -186,6 +203,118 @@ export default function SeleccionarMesaScreen() {
     });
   };
 
+  // --- Configurar número de mesas ---
+  const handleAbrirConfig = () => {
+    setNumeroMesasInput(mesas.length.toString());
+    setModalConfigVisible(true);
+  };
+
+  const handleGuardarConfig = async () => {
+    const N = parseInt(numeroMesasInput);
+    if (isNaN(N) || N < 1 || N > 99) {
+      Alert.alert('Número inválido', 'Ingresa un número entre 1 y 99.');
+      return;
+    }
+
+    setGuardandoConfig(true);
+    suppressRealtimeRef.current = true;
+
+    try {
+      // PASO 0: Obtener las mesas que quedan FUERA del rango [1..N]
+      const { data: mesasSobrantes, error: fetchSobrantesError } = await supabase
+        .from('mesas')
+        .select('id, numero_mesa, estado')
+        .gt('numero_mesa', N)
+        .order('numero_mesa', { ascending: false }); // descendente como pidió el usuario
+
+      if (fetchSobrantesError) throw fetchSobrantesError;
+
+      const sobrantes = mesasSobrantes ?? [];
+      console.log('[CONFIG] Sobrantes encontradas:', sobrantes.length, sobrantes.map((m: any) => m.numero_mesa));
+
+      // VALIDACIÓN: No permitir eliminar si alguna sobrante tiene órden activa
+      const conOrdenActiva = sobrantes.filter((m: any) => m.estado !== 'disponible');
+      if (conOrdenActiva.length > 0) {
+        const lista = conOrdenActiva
+          .map((m: any) => `• Mesa ${m.numero_mesa} (${m.estado})`)
+          .join('\n');
+        Alert.alert(
+          '⚠️ No se puede reducir',
+          `Estas mesas tienen órdenes activas.\nEspera a que finalicen:\n\n${lista}`,
+          [{ text: 'Entendido', style: 'cancel' }]
+        );
+        return;
+      }
+
+      // PASO 1: Eliminar las mesas sobrantes por ID (descendente: 20, 19, 18...)
+      if (sobrantes.length > 0) {
+        const ids = sobrantes.map((m: any) => m.id);
+        console.log('[CONFIG] Intentando borrar IDs:', ids);
+
+        const { data: deleteData, error: deleteError, count } = await supabase
+          .from('mesas')
+          .delete()
+          .in('id', ids)
+          .select(); // select() fuerza que Supabase confirme qué se borró
+
+        console.log('[CONFIG] Delete resultado:', { deleteData, deleteError, count });
+
+        if (deleteError) throw deleteError;
+
+        if (!deleteData || deleteData.length === 0) {
+          // Nada se borró - probablemente RLS bloqueó
+          Alert.alert(
+            '⚠️ Sin permisos de borrado',
+            `Supabase devolvió 0 filas eliminadas. Verifica que la política RLS de la tabla "mesas" permita DELETE. IDs intentados: ${ids.join(', ')}`
+          );
+          return;
+        }
+      }
+
+      // PASO 2: Re-consultar qué hay genuinamente en [1..N]
+      const { data: mesasRestantes, error: fetchError } = await supabase
+        .from('mesas')
+        .select('numero_mesa')
+        .lte('numero_mesa', N)
+        .order('numero_mesa', { ascending: true });
+      if (fetchError) throw fetchError;
+
+      const existentes = new Set<number>(
+        (mesasRestantes ?? []).map((m: any) => Number(m.numero_mesa))
+      );
+      console.log('[CONFIG] Existentes tras delete:', [...existentes]);
+
+      // PASO 3: Insertar solo los que genuinamente no existen en [1..N]
+      const faltantes: { numero_mesa: number; estado: string; ultima_actualizacion: string }[] = [];
+      for (let n = 1; n <= N; n++) {
+        if (!existentes.has(n)) {
+          faltantes.push({
+            numero_mesa: n,
+            estado: 'disponible',
+            ultima_actualizacion: new Date().toISOString(),
+          });
+        }
+      }
+
+      if (faltantes.length > 0) {
+        console.log('[CONFIG] Insertando faltantes:', faltantes.map(f => f.numero_mesa));
+        const { error: insertError } = await supabase.from('mesas').insert(faltantes);
+        if (insertError) throw insertError;
+      }
+
+      // PASO 4: Recargar lista y cerrar
+      await cargarMesas();
+      setModalConfigVisible(false);
+      Alert.alert('✅ Listo', `Mesas configuradas: 1 al ${N}.`);
+    } catch (err) {
+      logError('Error configurando mesas', err);
+      Alert.alert('Error', `No se pudo actualizar: ${formatErrorMessage(err)}`);
+    } finally {
+      suppressRealtimeRef.current = false;
+      setGuardandoConfig(false);
+    }
+  };
+
   //  Renderizar mesa con animación
   const renderMesa = (mesa: Mesa) => {
     if (!animacionesRef.current[mesa.id]) {
@@ -197,7 +326,7 @@ export default function SeleccionarMesaScreen() {
 
     return (
       <Animated.View
-        key={mesa.id}
+        key={`mesa-${mesa.id}`}
         style={{
           transform: [{ scale: animacionesRef.current[mesa.id] }],
           width: '30%',
@@ -235,6 +364,14 @@ export default function SeleccionarMesaScreen() {
         <ThemedText type="title" style={styles.title}>
           Seleccionar Mesa
         </ThemedText>
+        {esAdmin && (
+          <TouchableOpacity
+            onPress={handleAbrirConfig}
+            style={styles.configBtn}
+          >
+            <IconSymbol name="gearshape.fill" size={22} color="#8B4513" />
+          </TouchableOpacity>
+        )}
       </ThemedView>
       {errorMesas && (
         <ThemedView style={styles.errorBanner}>
@@ -330,6 +467,64 @@ export default function SeleccionarMesaScreen() {
 
         </ThemedView>
       </ScrollView>
+
+      {/* Modal de Configuración de Mesas */}
+      <Modal
+        visible={modalConfigVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalConfigVisible(false)}
+      >
+        <View style={styles.configModalOverlay}>
+          <View style={styles.configModalContent}>
+            <ThemedView style={styles.configModalHeader}>
+              <IconSymbol name="table.furniture" size={28} color="#8B4513" />
+              <ThemedText style={styles.configModalTitle}>Configurar Mesas</ThemedText>
+            </ThemedView>
+
+            <ThemedText style={styles.configModalSubtitle}>
+              Actualmente hay <ThemedText style={{ fontWeight: 'bold', color: '#8B4513' }}>{mesas.length}</ThemedText> mesa{mesas.length !== 1 ? 's' : ''}.
+              Ingresa el nuevo número total:
+            </ThemedText>
+
+            <TextInput
+              style={styles.configInput}
+              placeholder="Ej: 10"
+              placeholderTextColor="#BBB"
+              keyboardType="numeric"
+              value={numeroMesasInput}
+              onChangeText={setNumeroMesasInput}
+              maxLength={2}
+              autoFocus
+            />
+
+            <ThemedText style={styles.configWarning}>
+              ⚠️ Al reducir mesas, las de mayor número serán eliminadas permanentemente.
+            </ThemedText>
+
+            <View style={styles.configActions}>
+              <TouchableOpacity
+                style={styles.configCancelBtn}
+                onPress={() => setModalConfigVisible(false)}
+                disabled={guardandoConfig}
+              >
+                <ThemedText style={styles.configCancelText}>Cancelar</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.configSaveBtn, guardandoConfig && { opacity: 0.6 }]}
+                onPress={handleGuardarConfig}
+                disabled={guardandoConfig}
+              >
+                {guardandoConfig ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <ThemedText style={styles.configSaveText}>Guardar</ThemedText>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
     </ThemedView>
   );
@@ -443,5 +638,98 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingHorizontal: Layout.spacing.l,
     paddingVertical: Layout.spacing.l,
+  },
+
+  // --- Config Modal Styles ---
+  configBtn: {
+    padding: Layout.spacing.s,
+    marginLeft: 'auto',
+  },
+  configModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  configModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+  },
+  configModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+    backgroundColor: 'transparent',
+  },
+  configModalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#8B4513',
+  },
+  configModalSubtitle: {
+    fontSize: 15,
+    color: '#555',
+    marginBottom: 16,
+    lineHeight: 22,
+  },
+  configInput: {
+    height: 60,
+    borderWidth: 2,
+    borderColor: '#D4A574',
+    borderRadius: 14,
+    paddingHorizontal: 20,
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 14,
+    backgroundColor: '#FAFAFA',
+  },
+  configWarning: {
+    fontSize: 13,
+    color: '#C0392B',
+    backgroundColor: '#FDF3F3',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  configActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  configCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    backgroundColor: '#F0F0F0',
+  },
+  configCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  configSaveBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    backgroundColor: '#8B4513',
+  },
+  configSaveText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFF',
   },
 });

@@ -4,6 +4,7 @@ import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
 import { guardarVenta, ProductoVenta } from '@/servicios-api/ventas';
+import { useConfig } from '@/utilidades/context/ConfigContext';
 import { useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -21,6 +22,7 @@ const metodosPago = [
 export default function DetallesCobroScreen() {
   const colorScheme = useColorScheme();
   const { ordenes, procesarPago } = useOrdenes();
+  const { numeroNequi, numeroDaviplata } = useConfig();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const [metodoSeleccionado, setMetodoSeleccionado] = useState<string>('');
@@ -236,7 +238,7 @@ export default function DetallesCobroScreen() {
       // Mostrar confirmación
       Alert.alert(
         'Pago Exitoso',
-        `Orden cobrada exitosamente por $${total.toLocaleString()} usando ${metodosPago.find(m => m.id === metodoSeleccionado)?.nombre}\n\nID de Venta: ${resultadoVenta.idVenta}`,
+        `Orden cobrada exitosamente por $${total.toLocaleString()} usando ${metodosPago.find(m => m.id === metodoSeleccionado)?.nombre} \n\nID de Venta: ${resultadoVenta.idVenta} `,
         [
           {
             text: 'OK',
@@ -254,8 +256,12 @@ export default function DetallesCobroScreen() {
 
   // Renderizar cada producto de la orden con precio
   const renderProducto = ({ item }: { item: string }) => {
+    // Detectar si es un ítem para llevar
+    const esLlevar = item.startsWith('[Llevar]');
+    const itemSinPrefijo = esLlevar ? item.replace('[Llevar] ', '') : item;
+
     // Separar la cantidad si existe (formato: "Producto (tamaño) $20000 X2")
-    const partes = item.split(' X');
+    const partes = itemSinPrefijo.split(' X');
     const productoConPrecio = partes[0]; // "Producto (tamaño) $20000"
     const cantidad = partes[1];
 
@@ -267,11 +273,19 @@ export default function DetallesCobroScreen() {
     const productoLimpio = productoConPrecio.split(' $')[0].trim(); // "Producto (tamaño)"
 
     return (
-      <View key={item} style={styles.productoItemContainer}>
+      <View key={item} style={[styles.productoItemContainer, esLlevar && { borderLeftWidth: 3, borderLeftColor: '#FF8C00', backgroundColor: '#FFFBF5', paddingLeft: 10 }]}>
         <View style={styles.productoInfo}>
-          <ThemedText style={styles.productoItem}>
-            • {productoLimpio}
-          </ThemedText>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {esLlevar && (
+              <View style={{ backgroundColor: '#FF8C00', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <IconSymbol name="bag.fill" size={10} color="#fff" />
+                <ThemedText style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>LLEVAR</ThemedText>
+              </View>
+            )}
+            <ThemedText style={styles.productoItem}>
+              • {productoLimpio}
+            </ThemedText>
+          </View>
           <ThemedText style={styles.productoPrecio}>
             ${parseInt(precio).toLocaleString()}
           </ThemedText>
@@ -323,7 +337,7 @@ export default function DetallesCobroScreen() {
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <IconSymbol name="arrow.left" size={20} color="#8B4513" />
+          <IconSymbol name="arrow.left" size={28} color="#8B4513" />
         </TouchableOpacity>
         <ThemedView style={styles.titleContainer}>
           <ThemedText type="title" style={styles.title}>Detalles de Cobro</ThemedText>
@@ -451,7 +465,9 @@ export default function DetallesCobroScreen() {
               {metodoActual?.id === 'daviplata' && (
                 <View style={styles.modalContent}>
                   <ThemedText style={styles.modalSubtitulo}>Número de Daviplata:</ThemedText>
-                  <ThemedText style={styles.modalNumero}>300-123-4567</ThemedText>
+                  <ThemedText style={styles.modalNumero}>
+                    {numeroDaviplata || "No configurado (Ajustes en Inicio)"}
+                  </ThemedText>
                   <ThemedText style={styles.modalInstruccion}>
                     Recibe el pago en tu cuenta Daviplata y confirma cuando esté listo.
                   </ThemedText>
@@ -461,7 +477,9 @@ export default function DetallesCobroScreen() {
               {metodoActual?.id === 'nequi' && (
                 <View style={styles.modalContent}>
                   <ThemedText style={styles.modalSubtitulo}>Número de Nequi:</ThemedText>
-                  <ThemedText style={styles.modalNumero}>300-987-6543</ThemedText>
+                  <ThemedText style={styles.modalNumero}>
+                    {numeroNequi || "No configurado (Ajustes en Inicio)"}
+                  </ThemedText>
                   <ThemedText style={styles.modalInstruccion}>
                     Recibe el pago en tu cuenta Nequi y confirma cuando esté listo.
                   </ThemedText>

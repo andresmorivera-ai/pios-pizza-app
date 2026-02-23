@@ -5,11 +5,13 @@ import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
 import { useAuth } from '@/utilidades/context/AuthContext';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { RealtimePostgresChangesPayload } from '@supabase/supabase-js'; // Importar el tipo de payload
+import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router'; // Importar router de expo-router
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Interfaz para órdenes generales desde Supabase
@@ -20,7 +22,7 @@ interface OrdenGeneral {
     productos: string[];
     total: number;
     estado: string;
-    created_at: string;
+    creado_en: string;
     productos_nuevos?: number[];
     productos_listos?: number[];
     productos_entregados?: number[];
@@ -525,8 +527,28 @@ export default function OrdenesUnificadasScreen() {
 
                 {orden.referencia && (
                     <ThemedView style={styles.referenciaContainer}>
-                        <IconSymbol name="info.circle" size={16} color="#666" />
-                        <ThemedText style={styles.referenciaTexto}>{orden.referencia}</ThemedText>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', flex: 1, paddingRight: 10 }}>
+                            <IconSymbol name="location.fill" size={16} color="#FF8C00" style={{ marginTop: 2 }} />
+                            <ThemedText style={styles.referenciaTexto}>{orden.referencia}</ThemedText>
+                        </View>
+                        <TouchableOpacity
+                            onPress={async () => {
+                                await Clipboard.setStringAsync(orden.referencia || '');
+                                Alert.alert('¡Copiado!', 'Dirección copiada al portapapeles');
+                            }}
+                            style={{
+                                backgroundColor: '#FF8C00',
+                                padding: 8,
+                                borderRadius: 8,
+                                elevation: 2,
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 1 },
+                                shadowOpacity: 0.2,
+                                shadowRadius: 2,
+                            }}
+                        >
+                            <Ionicons name="copy-outline" size={20} color="#FFF" />
+                        </TouchableOpacity>
                     </ThemedView>
                 )}
 
@@ -585,7 +607,7 @@ export default function OrdenesUnificadasScreen() {
 
                 <ThemedView style={styles.ordenFooter}>
                     <ThemedText style={styles.fechaTexto}>
-                        {new Date(orden.created_at).toLocaleTimeString('es-ES', {
+                        {new Date(orden.creado_en).toLocaleTimeString('es-ES', {
                             hour: '2-digit',
                             minute: '2-digit'
                         })}

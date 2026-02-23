@@ -138,21 +138,34 @@ export function PieChart({ data, size = 280, strokeWidth = 25 }: PieChartProps) 
                 strokeWidth={Layout.moderateScale(3)}
                 opacity={0.95}
               />
-              {/* Texto del porcentaje (solo si es mayor al 8% para que se vea bien) */}
               {segment.porcentaje > 8 && (
-                <SvgText
-                  x={segment.textX}
-                  y={segment.textY + 5}
-                  fontSize={Layout.fontSize.m}
-                  fontWeight="bold"
-                  fill="#fff"
-                  textAnchor="middle"
-                  alignmentBaseline="middle"
-                  stroke="#000"
-                  strokeWidth="1"
-                >
-                  {segment.porcentaje.toFixed(0)}%
-                </SvgText>
+                <>
+                  <SvgText
+                    x={segment.textX}
+                    y={segment.textY + 5}
+                    fontSize={Layout.fontSize.l || 16}
+                    fontWeight="900"
+                    fill="none"
+                    stroke="rgba(0,0,0,0.6)"
+                    strokeWidth="3"
+                    strokeLinejoin="round"
+                    textAnchor="middle"
+                    alignmentBaseline="middle"
+                  >
+                    {segment.porcentaje.toFixed(0)}%
+                  </SvgText>
+                  <SvgText
+                    x={segment.textX}
+                    y={segment.textY + 5}
+                    fontSize={Layout.fontSize.l || 16}
+                    fontWeight="900"
+                    fill="#ffffff"
+                    textAnchor="middle"
+                    alignmentBaseline="middle"
+                  >
+                    {segment.porcentaje.toFixed(0)}%
+                  </SvgText>
+                </>
               )}
             </G>
           ))}

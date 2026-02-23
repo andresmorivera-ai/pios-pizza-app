@@ -13,12 +13,12 @@ import { Alert, BackHandler, Dimensions, ScaledSize, ScrollView, StyleSheet, Tou
 // Interfaz para órdenes generales (de la base de datos)
 interface OrdenGeneral {
   id: string;
-  tipo: 'Domicilio' | 'Llevar';
+  tipo: string;
   referencia?: string;
   productos: string[];
   total: number;
   estado: string;
-  created_at: string;
+  creado_en: string;
   productos_nuevos?: number[];
   productos_listos?: number[];
   productos_entregados?: number[];
@@ -84,7 +84,8 @@ export default function CocinaScreen() {
           o.tipo.toLowerCase().includes('domicilio') || o.tipo.toLowerCase().includes('llevar')
         ).map(o => ({
           ...o,
-          tipo: o.tipo.toLowerCase().includes('domicilio') ? 'Domicilio' : 'Llevar'
+          // Preservar tipo original completo (ej: 'Llevar - Mesa 5') para identificar en cocina
+          tipo: o.tipo.toLowerCase().includes('domicilio') ? 'Domicilio' : o.tipo
         }));
         setOrdenesGenerales(generalesFiltradas);
       }
@@ -222,8 +223,9 @@ export default function CocinaScreen() {
       setOrdenesVisibles((prev) => prev.filter((o) => o.id !== orden.id));
       if (ordenExpandida === orden.id) setOrdenExpandida(null);
     } else {
-      await actualizarEstadoGeneralEnDB(orden.id, 'listo');
-      // Remover inmediatamente de la vista
+      // Para ordenes generales (llevar / domicilio): pasar a pendiente_por_pagar
+      // para que aparezcan en Cobrar listos para pagar
+      await actualizarEstadoGeneralEnDB(orden.id, 'pendiente_por_pagar');
       setOrdenesVisibles((prev) => prev.filter((o) => o.id !== orden.id));
       if (ordenExpandida === orden.id) setOrdenExpandida(null);
     }
@@ -252,11 +254,14 @@ export default function CocinaScreen() {
         color: '#FF8C00'
       };
     } else {
-      const tipoOrden = orden.tipo;
-      const simbolo = tipoOrden === 'Domicilio' ? 'car.fill' : 'bag.fill';
+      const tipoRaw = (orden as OrdenGeneral & { origen: 'general' }).tipo;
+      // Mostrar tipo completo: 'Domicilio', 'Para Llevar', 'Para Llevar - Mesa 5'
+      const esDomicilio = tipoRaw === 'Domicilio';
+      const simbolo = esDomicilio ? 'car.fill' : 'bag.fill';
+      const textoMostrar = esDomicilio ? 'Domicilio' : tipoRaw; // Ej: 'Llevar - Mesa 5'
       return {
-        texto: tipoOrden,
-        tipoOrden: tipoOrden,
+        texto: textoMostrar,
+        tipoOrden: tipoRaw,
         simbolo: simbolo,
         color: '#9C27B0'
       };
@@ -341,7 +346,9 @@ export default function CocinaScreen() {
                       <View style={styles.productosContainer}>
                         {orden.productos && orden.productos.length > 0 ? (
                           orden.productos.map((producto, i) => {
-                            const partes = producto.split(' X');
+                            const esLlevar = producto.startsWith('[Llevar]');
+                            const productoSinPrefijo = esLlevar ? producto.replace('[Llevar] ', '') : producto;
+                            const partes = productoSinPrefijo.split(' X');
                             const nombre = partes[0].split(' $')[0].trim();
                             const cantidad = partes[1];
                             const esProductoNuevo = productosNuevos?.includes(i);
@@ -349,8 +356,13 @@ export default function CocinaScreen() {
                             const esProductoEntregado = productosEntregados?.includes(i);
 
                             return (
-                              <View key={i} style={styles.productoItemContainer}>
+                              <View key={i} style={[styles.productoItemContainer, esLlevar && { borderLeftWidth: 3, borderLeftColor: '#FF8C00', paddingLeft: 6, backgroundColor: '#FFFBF5' }]}>
                                 <View style={[styles.productoItemInfo, { flexWrap: 'wrap' }]}>
+                                  {esLlevar && (
+                                    <View style={{ backgroundColor: '#FF8C00', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 6, marginRight: 4 }}>
+                                      <ThemedText style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>🛍️ LLEVAR</ThemedText>
+                                    </View>
+                                  )}
                                   <ThemedText style={styles.productoItem}>• {nombre}</ThemedText>
                                   {esProductoEntregado ? (
                                     <View style={styles.productoStatus}>

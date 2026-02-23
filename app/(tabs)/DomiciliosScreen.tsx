@@ -3,7 +3,9 @@ import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -14,7 +16,8 @@ import {
   ScrollView,
   StyleSheet,
   TextInput,
-  TouchableOpacity
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -58,6 +61,16 @@ interface DireccionCliente {
   referencia: string;
 }
 
+interface OrdenGeneral {
+  id: string;
+  tipo: string;
+  referencia: string;
+  productos: string[];
+  total: number;
+  estado: string;
+  creado_en: string;
+}
+
 export default function DomiciliosScreen() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>('');
@@ -87,16 +100,40 @@ export default function DomiciliosScreen() {
   // Precio del icopor
   const PRECIO_ICOPOR = 500;
 
+  const [pedidosEnCurso, setPedidosEnCurso] = useState<OrdenGeneral[]>([]);
+
+  const cargarPedidosEnCurso = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('ordenesgenerales')
+        .select('*')
+        .like('tipo', 'Domicilio -%')
+        .neq('estado', 'pagado')
+        .neq('estado', 'cancelado')
+        .order('creado_en', { ascending: false });
+
+      if (error) {
+        console.error('Error cargando pedidos en curso:', error);
+      } else if (data) {
+        setPedidosEnCurso(data);
+      }
+    } catch (error) {
+      console.error('Error cargando pedidos en curso:', error);
+    }
+  };
+
   // Recargar clientes recurrentes cuando la pantalla recibe foco
   useFocusEffect(
     useCallback(() => {
       cargarClientesRecurrentes();
+      cargarPedidosEnCurso();
     }, [])
   );
 
   // Cargar clientes recurrentes desde Supabase
   useEffect(() => {
     cargarClientesRecurrentes();
+    cargarPedidosEnCurso();
   }, []);
 
   const cargarClientesRecurrentes = async () => {
@@ -487,7 +524,7 @@ export default function DomiciliosScreen() {
           <IconSymbol name="chevron.left" size={24} color="#8B4513" />
         </TouchableOpacity>
         <ThemedText type="title" style={styles.title}>
-          Pedidos a Domicilio
+          🛵 Pedidos a Domicilio
         </ThemedText>
       </ThemedView>
 
@@ -500,10 +537,72 @@ export default function DomiciliosScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 20) }}
         >
+          {/* Pedidos en Curso */}
+          {pedidosEnCurso.length > 0 && (
+            <ThemedView style={styles.seccionPedidosCurso}>
+              <ThemedView style={styles.pedidosCursoHeader}>
+                <ThemedView style={styles.tituloBadge}>
+                  <IconSymbol name="list.clipboard.fill" size={20} color="#FF8C00" />
+                  <ThemedText style={styles.seccionTituloBadge}>Pedidos en Curso</ThemedText>
+                </ThemedView>
+                <ThemedView style={styles.clientesCountBadge}>
+                  <ThemedText style={styles.clientesCountTexto}>{pedidosEnCurso.length}</ThemedText>
+                </ThemedView>
+              </ThemedView>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pedidosCursoScroll}>
+                {pedidosEnCurso.map((pedido) => {
+                  const isPreparando = pedido.estado === 'preparando';
+                  const isListo = pedido.estado === 'listo';
+                  const parts = pedido.referencia.split('-');
+                  const nombre = parts[0]?.trim() || '';
+                  const telefono = parts[1]?.trim() || '';
+                  const direccion = parts[2]?.trim() || '';
+                  const referencia = parts.slice(3).join('-').trim() || '';
+
+                  const copiarDireccion = async () => {
+                    const dirCompleta = direccion + (referencia ? `, ${referencia}` : '');
+                    await Clipboard.setStringAsync(dirCompleta);
+                    Alert.alert('¡Copiado!', 'Dirección copiada al portapapeles');
+                  };
+
+                  return (
+                    <ThemedView key={pedido.id} style={styles.pedidoCursoCard}>
+                      <ThemedView style={styles.pedidoCursoHeaderCont}>
+                        <ThemedText style={styles.pedidoCursoNombre} numberOfLines={1}>{nombre}</ThemedText>
+                        <ThemedView style={[styles.pedidoCursoEstadoBadge, isPreparando || isListo ? styles.estadoPreparando : styles.estadoPendiente, isListo ? styles.estadoListo : null]}>
+                          <ThemedText style={styles.pedidoCursoEstadoTexto}>{pedido.estado.toUpperCase().replace(/_/g, ' ')}</ThemedText>
+                        </ThemedView>
+                      </ThemedView>
+                      <ThemedView style={styles.pedidoCursoDetalleContainer}>
+                        <IconSymbol name="phone.fill" size={16} color="#8B4513" />
+                        <ThemedText style={styles.pedidoCursoDetalleTexto}>{telefono}</ThemedText>
+                      </ThemedView>
+                      <ThemedView style={styles.pedidoCursoDetalleContainerDir}>
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', flex: 1, paddingRight: 10 }}>
+                          <IconSymbol name="location.fill" size={16} color="#FF8C00" style={{ marginTop: 2 }} />
+                          <ThemedText style={styles.pedidoCursoDetalleTextoDir} numberOfLines={3}>
+                            {direccion}{referencia ? ` - ${referencia}` : ''}
+                          </ThemedText>
+                        </View>
+                        <TouchableOpacity onPress={copiarDireccion} style={styles.copiarButton}>
+                          <Ionicons name="copy-outline" size={20} color="#FFF" />
+                        </TouchableOpacity>
+                      </ThemedView>
+                    </ThemedView>
+                  );
+                })}
+              </ScrollView>
+            </ThemedView>
+          )}
+
           {/* Información del Cliente */}
           <ThemedView style={styles.seccionCliente}>
             <ThemedView style={styles.clienteHeader}>
-              <ThemedText style={styles.seccionTitulo}>📍 Información del Cliente</ThemedText>
+              <ThemedView style={styles.tituloBadge}>
+                <IconSymbol name="person.crop.circle.badge.plus" size={20} color="#FF8C00" />
+                <ThemedText style={styles.seccionTituloBadge}>Información del Cliente</ThemedText>
+              </ThemedView>
               {clientesRecurrentes.length > 0 && (
                 <ThemedView style={styles.clientesCountBadge}>
                   <IconSymbol name="person.2.fill" size={16} color="#fff" />
@@ -585,7 +684,10 @@ export default function DomiciliosScreen() {
 
           {/* Botones de Categorías */}
           <ThemedView style={styles.categoriasContainer}>
-            <ThemedText style={styles.seccionTitulo}>🍕 Categorías</ThemedText>
+            <ThemedView style={styles.tituloBadge}>
+              <IconSymbol name="tag.fill" size={20} color="#FF8C00" />
+              <ThemedText style={styles.seccionTituloBadge}>Categorías</ThemedText>
+            </ThemedView>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriasScroll}>
               {categorias.map((categoria) => (
                 <TouchableOpacity
@@ -609,9 +711,12 @@ export default function DomiciliosScreen() {
 
           {/* Productos de la categoría seleccionada */}
           <ThemedView style={styles.productosSection}>
-            <ThemedText style={styles.seccionTitulo}>
-              Productos - {categoriaSeleccionada.charAt(0).toUpperCase() + categoriaSeleccionada.slice(1)}
-            </ThemedText>
+            <ThemedView style={styles.tituloBadge}>
+              <IconSymbol name="cart.fill" size={20} color="#FF8C00" />
+              <ThemedText style={styles.seccionTituloBadge}>
+                Productos - {categoriaSeleccionada.charAt(0).toUpperCase() + categoriaSeleccionada.slice(1)}
+              </ThemedText>
+            </ThemedView>
             <ThemedView style={styles.productosGrid}>
               {productosUnicos.map((producto) => {
                 const variantes = obtenerVariantes(producto.nombre);
@@ -637,7 +742,10 @@ export default function DomiciliosScreen() {
 
           {/* Icopores */}
           <ThemedView style={styles.icoporesSection}>
-            <ThemedText style={styles.seccionTitulo}>🥡 Icopores</ThemedText>
+            <ThemedView style={styles.tituloBadge}>
+              <IconSymbol name="takeoutbag.and.cup.and.straw.fill" size={20} color="#FF8C00" />
+              <ThemedText style={styles.seccionTituloBadge}>Icopores</ThemedText>
+            </ThemedView>
             <ThemedView style={styles.icoporesCard}>
               <ThemedView style={styles.icoporesInfo}>
                 <ThemedText style={styles.icoporesTexto}>Icopor</ThemedText>
@@ -675,9 +783,12 @@ export default function DomiciliosScreen() {
           {/* Productos Seleccionados */}
           {productosSeleccionados.length > 0 && (
             <ThemedView style={styles.seleccionadosSection}>
-              <ThemedText style={styles.seccionTitulo}>
-                🛒 Productos Seleccionados ({productosSeleccionados.length})
-              </ThemedText>
+              <ThemedView style={styles.tituloBadge}>
+                <IconSymbol name="bag.fill" size={20} color="#FF8C00" />
+                <ThemedText style={styles.seccionTituloBadge}>
+                  Productos Seleccionados ({productosSeleccionados.length})
+                </ThemedText>
+              </ThemedView>
               {productosSeleccionados.map((producto, index) => {
                 const precioTotal = producto.precio * producto.cantidad;
                 return (
@@ -727,7 +838,10 @@ export default function DomiciliosScreen() {
           {/* Resumen de Totales */}
           {(productosSeleccionados.length > 0 || cantidadIcopores > 0) && (
             <ThemedView style={styles.resumenSection}>
-              <ThemedText style={styles.seccionTitulo}>💰 Resumen</ThemedText>
+              <ThemedView style={styles.tituloBadge}>
+                <IconSymbol name="dollarsign.circle.fill" size={20} color="#FF8C00" />
+                <ThemedText style={styles.seccionTituloBadge}>Resumen</ThemedText>
+              </ThemedView>
 
               <ThemedView style={styles.resumenItem}>
                 <ThemedText style={styles.resumenLabel}>Subtotal Productos:</ThemedText>
@@ -964,47 +1078,77 @@ const styles = StyleSheet.create({
     paddingBottom: Layout.spacing.l,
     gap: Layout.spacing.m,
     backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    zIndex: 10,
   },
   backButton: {
-    padding: Layout.spacing.s,
+    padding: Layout.spacing.m,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 50,
   },
   title: {
     fontSize: Layout.fontSize.xxl,
-    fontWeight: 'bold',
+    fontWeight: '900',
     color: '#8B4513',
     flex: 1,
+    letterSpacing: -0.5,
   },
   scrollContent: {
     flex: 1,
   },
   seccionCliente: {
-    backgroundColor: '#FFF3E0',
+    backgroundColor: '#FFF8F0',
     marginHorizontal: Layout.spacing.l,
     marginBottom: Layout.spacing.l,
     padding: Layout.spacing.m,
     borderRadius: Layout.borderRadius.xl,
     gap: Layout.spacing.m,
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
   },
   clienteHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Layout.spacing.s,
-    backgroundColor: '#FFF3E0',
+    backgroundColor: '#FFF8F0',
+  },
+  tituloBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF4E6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  seccionTituloBadge: {
+    fontSize: Layout.fontSize.l,
+    fontWeight: 'bold',
+    color: '#8B4513',
   },
   clientesCountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2196F3',
-    paddingHorizontal: Layout.spacing.s,
+    backgroundColor: '#339AF0',
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: Layout.borderRadius.xl,
+    borderRadius: 20,
     gap: 4,
+    elevation: 2,
+    shadowColor: '#339AF0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   clientesCountTexto: {
     color: '#fff',
@@ -1015,27 +1159,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#C8E6C9',
+    backgroundColor: '#EBFBEE',
     paddingHorizontal: Layout.spacing.m,
-    paddingVertical: 10,
-    borderRadius: Layout.borderRadius.l,
-    marginBottom: Layout.spacing.s,
+    paddingVertical: 12,
+    borderRadius: 16,
+    marginBottom: Layout.spacing.m,
     borderWidth: 1,
-    borderColor: '#81C784',
+    borderColor: '#B2F2BB',
   },
   clienteSeleccionadoInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Layout.spacing.s,
     flex: 1,
-    backgroundColor: '#C8E6C9',
   },
   clienteSeleccionadoTexto: {
-    fontSize: Layout.fontSize.s,
-    fontWeight: '600',
-    color: '#27702bff',
+    fontSize: Layout.fontSize.m,
+    fontWeight: '700',
+    color: '#2B8A3E',
     flex: 1,
-    backgroundColor: '#C8E6C9',
   },
   telefonoEncontradoIndicador: {
     marginLeft: Layout.spacing.s,
@@ -1044,24 +1186,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: Layout.borderRadius.l,
+    borderRadius: 16,
     paddingHorizontal: Layout.spacing.m,
     paddingVertical: Layout.spacing.s,
-    gap: 10,
+    gap: 12,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: '#E9ECEF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   input: {
     flex: 1,
     fontSize: Layout.fontSize.m,
     color: '#333',
     paddingVertical: Layout.spacing.s,
-  },
-  seccionTitulo: {
-    fontSize: Layout.fontSize.xl,
-    fontWeight: 'bold',
-    color: '#8B4513',
-    marginBottom: Layout.spacing.m,
   },
   categoriasContainer: {
     marginBottom: Layout.spacing.l,
@@ -1071,17 +1212,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   categoriaButton: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: Layout.spacing.l,
-    paddingVertical: Layout.spacing.m,
-    borderRadius: Layout.borderRadius.xl,
+    backgroundColor: '#F1F3F5',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 50,
     marginRight: 10,
-    borderWidth: 2,
-    borderColor: '#f0f0f0',
   },
   categoriaButtonActiva: {
     backgroundColor: '#FF8C00',
-    borderColor: '#FF8C00',
+    elevation: 3,
+    shadowColor: '#FF8C00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   categoriaTexto: {
     fontSize: Layout.fontSize.l,
@@ -1103,30 +1246,36 @@ const styles = StyleSheet.create({
   productoCard: {
     width: Layout.isTablet ? '31%' : '47%',
     backgroundColor: '#fff',
-    borderRadius: Layout.borderRadius.xl,
+    borderRadius: 16,
     padding: Layout.spacing.m,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowRadius: 4,
     borderWidth: 1,
     borderColor: '#f0f0f0',
-    minHeight: 100,
+    minHeight: 110,
     justifyContent: 'space-between',
   },
   productoNombre: {
     fontSize: Layout.fontSize.m,
     fontWeight: 'bold',
-    color: '#8B4513',
+    color: '#495057',
     marginBottom: 8,
     textAlign: 'center',
   },
   productoPrecio: {
     fontSize: Layout.fontSize.m,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#FF8C00',
     textAlign: 'center',
+    backgroundColor: '#FFF4E6',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    alignSelf: 'center',
+    overflow: 'hidden',
   },
   icoporesSection: {
     marginBottom: Layout.spacing.l,
@@ -1175,15 +1324,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: Layout.borderRadius.l,
+    borderRadius: 16,
     padding: Layout.spacing.m,
     marginBottom: Layout.spacing.s,
-    elevation: 2,
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    borderLeftWidth: 4,
+    shadowRadius: 4,
+    borderLeftWidth: 5,
     borderLeftColor: '#4CAF50',
   },
   seleccionadoInfo: {
@@ -1220,11 +1369,16 @@ const styles = StyleSheet.create({
   },
   cantidadButton: {
     backgroundColor: '#FF8C00',
-    width: 32,
-    height: 32,
-    borderRadius: 6,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#FF8C00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   cantidadButtonTexto: {
     color: '#fff',
@@ -1296,18 +1450,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#28A745',
-    padding: Layout.spacing.m,
-    borderRadius: Layout.borderRadius.xl,
+    paddingVertical: 16,
+    paddingHorizontal: Layout.spacing.xl,
+    borderRadius: 50,
     gap: 12,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    elevation: 6,
+    shadowColor: '#28A745',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
   confirmButtonDisabled: {
     backgroundColor: '#95D5A0',
     opacity: 0.7,
+    elevation: 0,
   },
   confirmButtonText: {
     color: '#fff',
@@ -1319,8 +1475,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#DC3545',
-    padding: Layout.spacing.m,
-    borderRadius: Layout.borderRadius.xl,
+    paddingVertical: 16,
+    paddingHorizontal: Layout.spacing.xl,
+    borderRadius: 50,
     gap: 12,
   },
   cancelButtonText: {
@@ -1561,5 +1718,105 @@ const styles = StyleSheet.create({
     fontSize: Layout.fontSize.l,
     fontWeight: '700',
     color: '#666',
+  },
+  seccionPedidosCurso: {
+    marginHorizontal: Layout.spacing.l,
+    marginBottom: Layout.spacing.l,
+    gap: Layout.spacing.s,
+  },
+  pedidosCursoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Layout.spacing.s,
+  },
+  pedidosCursoScroll: {
+    flexDirection: 'row',
+    paddingBottom: Layout.spacing.s,
+  },
+  pedidoCursoCard: {
+    backgroundColor: '#fff',
+    borderRadius: Layout.borderRadius.xl,
+    padding: Layout.spacing.l,
+    marginRight: Layout.spacing.m,
+    width: 280,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+  },
+  pedidoCursoHeaderCont: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Layout.spacing.m,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+    paddingBottom: Layout.spacing.s,
+  },
+  pedidoCursoNombre: {
+    fontSize: Layout.fontSize.l,
+    fontWeight: 'bold',
+    color: '#8B4513',
+    flex: 1,
+    marginRight: Layout.spacing.s,
+  },
+  pedidoCursoEstadoBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  estadoPendiente: {
+    backgroundColor: '#FFCC80',
+  },
+  estadoPreparando: {
+    backgroundColor: '#4FC3F7',
+  },
+  estadoListo: {
+    backgroundColor: '#81C784',
+  },
+  pedidoCursoEstadoTexto: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 10,
+  },
+  pedidoCursoDetalleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Layout.spacing.s,
+    gap: Layout.spacing.s,
+  },
+  pedidoCursoDetalleTexto: {
+    fontSize: Layout.fontSize.m,
+    color: '#444',
+    fontWeight: '600',
+  },
+  pedidoCursoDetalleContainerDir: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF8E1',
+    padding: Layout.spacing.s,
+    borderRadius: Layout.borderRadius.m,
+    marginTop: Layout.spacing.s,
+  },
+  pedidoCursoDetalleTextoDir: {
+    fontSize: Layout.fontSize.m,
+    color: '#555',
+    marginLeft: Layout.spacing.s,
+    lineHeight: 20,
+  },
+  copiarButton: {
+    backgroundColor: '#FF8C00',
+    padding: 8,
+    borderRadius: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
 });

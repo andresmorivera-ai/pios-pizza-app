@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "myApp",
+    "name": "Asadero",
     "slug": "myApp",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./recursos/assets/imagenes/icon.png",
+    "icon": "./recursos/assets/imagenes/icon-asadero.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,7 +14,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./recursos/assets/imagenes/android-icon-foreground.png",
+        "foregroundImage": "./recursos/assets/imagenes/icon-asadero.png",
         "backgroundImage": "./recursos/assets/imagenes/android-icon-background.png",
         "monochromeImage": "./recursos/assets/imagenes/android-icon-monochrome.png"
       },
@@ -31,7 +31,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./recursos/assets/imagenes/splash-icon.png",
+          "image": "./recursos/assets/imagenes/icon-asadero.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",

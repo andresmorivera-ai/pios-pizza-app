@@ -57,6 +57,13 @@ const MAPPING = {
   'banknote.fill': 'attach-money',
   'arrow.down.forward': 'subdirectory-arrow-right',
   'moon.stars.fill': 'nightlight-round',
+  'eye.fill': 'visibility',
+  'eye.slash.fill': 'visibility-off',
+  'lock.fill': 'lock',
+  'creditcard.fill': 'credit-card',
+  'exclamationmark.shield.fill': 'security',
+  'arrow.down.to.line': 'south',
+  'arrow.up.right.square': 'north-east',
 
 } as IconMapping;
 

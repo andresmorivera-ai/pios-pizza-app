@@ -3,6 +3,7 @@ import { ThemedView } from '@/componentes/themed-view';
 import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
+import { useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -13,7 +14,8 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  TouchableOpacity
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -58,6 +60,7 @@ interface DireccionCliente {
 }
 
 export default function DomiciliosScreen() {
+  const { getOrdenActivaPorMesa, actualizarProductosOrden } = useOrdenes();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>('');
   const [productosSeleccionados, setProductosSeleccionados] = useState<ProductoSeleccionado[]>([]);
@@ -65,11 +68,15 @@ export default function DomiciliosScreen() {
   const [modalSugerenciaVisible, setModalSugerenciaVisible] = useState(false);
   const [productoParaTamano, setProductoParaTamano] = useState<Producto | null>(null);
   const [varianteSeleccionada, setVarianteSeleccionada] = useState<Producto | null>(null);
-  const [cantidadIcopores, setCantidadIcopores] = useState<number>(0);
+  const [cantidadIcopores, setCantidadIcopores] = useState<number>(1);
   const [clientesRecurrentes, setClientesRecurrentes] = useState<ClienteRecurrente[]>([]);
   const [clienteSugerido, setClienteSugerido] = useState<ClienteRecurrente | null>(null);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<ClienteRecurrente | null>(null);
   const [guardandoPedido, setGuardandoPedido] = useState(false);
+  const [mesas, setMesas] = useState<any[]>([]);
+  const [mesaSeleccionada, setMesaSeleccionada] = useState<number | null>(null);
+  const [modalMesaVisible, setModalMesaVisible] = useState(false);
+  const [modalDetallesVisible, setModalDetallesVisible] = useState(false);
   const insets = useSafeAreaInsets();
 
 
@@ -87,9 +94,19 @@ export default function DomiciliosScreen() {
     }, [])
   );
 
-  // Cargar clientes recurrentes desde Supabase
+  // Cargar clientes recurrentes y mesas desde Supabase
   useEffect(() => {
     cargarClientesRecurrentes();
+
+    const cargarMesas = async () => {
+      try {
+        const { data } = await supabase.from('mesas').select('*').order('numero_mesa', { ascending: true });
+        if (data) setMesas(data);
+      } catch (err) {
+        console.error('Error cargando mesas', err);
+      }
+    };
+    cargarMesas();
   }, []);
 
   const cargarClientesRecurrentes = async () => {
@@ -282,47 +299,86 @@ export default function DomiciliosScreen() {
   };
 
 
-  // Confirmar y guardar pedido en Supabase - FORMATO CORREGIDO
+  // Confirmar y guardar pedido en Supabase
   const handleConfirmarPedido = async () => {
     if (productosSeleccionados.length === 0) {
       Alert.alert('Error', 'Por favor selecciona al menos un producto.');
       return;
     }
 
-
-    if (guardandoPedido) {
-      return;
-    }
-
+    if (guardandoPedido) return;
     setGuardandoPedido(true);
 
     try {
-      const subtotal = calcularSubtotal();
-      const totalIcopores = calcularTotalIcopores();
       const totalPedido = calcularTotal();
+      const totalIcopores = calcularTotalIcopores();
 
-
-
-
-      // 2. Preparar datos de productos en formato string (IGUAL QUE CREAR-ORDEN)
-      // Formato: "Producto (tamaño) $20000 X2"
+      // Preparar productos en formato string
       const productosFormateados = productosSeleccionados.map(
         p => `${p.nombre} (${p.tamano}) $${p.precio} X${p.cantidad}`
       );
-
-      // Si hay icopores, agregarlos en el mismo formato
       if (cantidadIcopores > 0) {
-        productosFormateados.push(
-          `Icopor (Unitario) $${PRECIO_ICOPOR} X${cantidadIcopores}`
-        );
+        productosFormateados.push(`Icopor (Unitario) $${PRECIO_ICOPOR} X${cantidadIcopores}`);
       }
 
-      // 3. Crear orden en tabla ordenes (MISMO FORMATO QUE CREAR-ORDEN)
-      const { data: ordenData, error: ordenError } = await supabase
+      // ─── Si hay mesa seleccionada, buscar su orden activa en el contexto ───
+      if (mesaSeleccionada !== null) {
+        const ordenMesa = getOrdenActivaPorMesa(String(mesaSeleccionada));
+
+        if (ordenMesa) {
+          // ✅ La mesa tiene orden activa → fusionar preservando el estado actual
+          const productosPrefijados = productosFormateados.map(p => `[Llevar] ${p}`);
+          const productosCombinados = [...ordenMesa.productos, ...productosPrefijados];
+          const totalCombinado = ordenMesa.total + totalPedido;
+
+          // Update directo: solo cambia productos y total, NO toca el estado
+          // (actualizarProductosOrden del contexto resetea a 'pendiente' lo que saca la orden de cobrar)
+          const { error: errorUpdate } = await supabase
+            .from('ordenes')
+            .update({
+              productos: productosCombinados,
+              total: totalCombinado,
+            })
+            .eq('id', ordenMesa.id);
+
+          if (errorUpdate) {
+            console.error('Error fusionando con orden de mesa:', errorUpdate);
+            Alert.alert('Error', 'No se pudo agregar a la orden de la mesa.');
+            setGuardandoPedido(false);
+            return;
+          }
+
+          Alert.alert(
+            '✅ Agregado a Mesa ' + mesaSeleccionada,
+            `Los productos para llevar se sumaron a la cuenta de la Mesa ${mesaSeleccionada}.\n\n` +
+            productosSeleccionados.map((p, i) => `${i + 1}. ${p.nombre} (${p.tamano}) x${p.cantidad}`).join('\n') +
+            (cantidadIcopores > 0 ? `\n🥡 Icopores: ${cantidadIcopores}x` : '') +
+            `\n\n💰 Nuevo total Mesa ${mesaSeleccionada}: $${totalCombinado.toLocaleString('es-CO')}`,
+            [{
+              text: 'OK', onPress: () => {
+                setProductosSeleccionados([]);
+                setCantidadIcopores(1);
+                setMesaSeleccionada(null);
+                setGuardandoPedido(false);
+                router.back();
+              }
+            }]
+          );
+          return;
+        }
+        // Si la mesa no tiene orden activa, guardar en ordenesgenerales indicando la mesa
+      }
+
+
+
+      // ─── Sin mesa activa o sin mesa seleccionada → guardar en ordenesgenerales ───
+      const tipoPedido = mesaSeleccionada ? `Llevar - Mesa ${mesaSeleccionada}` : 'Llevar';
+
+      const { error: ordenError } = await supabase
         .from('ordenesgenerales')
         .insert({
-          tipo: `Llevar`,
-          productos: productosFormateados, // Array de strings, no objetos
+          tipo: tipoPedido,
+          productos: productosFormateados,
           total: totalPedido,
           estado: 'pendiente'
         })
@@ -336,40 +392,25 @@ export default function DomiciliosScreen() {
         return;
       }
 
-
-      // 4. Recargar clientes recurrentes
-      await cargarClientesRecurrentes();
-
-      // 5. Mostrar mensaje de éxito
       const listaProductos = productosSeleccionados
-        .map((producto, index) =>
-          `${index + 1}. ${producto.nombre} (${producto.tamano}) - $${producto.precio.toLocaleString('es-CO')} X${producto.cantidad}`
-        )
+        .map((p, i) => `${i + 1}. ${p.nombre} (${p.tamano}) - $${p.precio.toLocaleString('es-CO')} X${p.cantidad}`)
         .join('\n');
-
       const resumenIcopores = cantidadIcopores > 0
-        ? `\n\n🥡 Icopores: ${cantidadIcopores} X $${PRECIO_ICOPOR.toLocaleString('es-CO')} = $${totalIcopores.toLocaleString('es-CO')}`
+        ? `\n\n🥡 Icopores: ${cantidadIcopores}x = $${totalIcopores.toLocaleString('es-CO')}`
         : '';
-
-      const mensajeClienteRecurrente = clienteSeleccionado
-        ? `\n🎉 Cliente recurrente - Pedido #${clienteSeleccionado.cantidad_pedidos + 1}\n\n`
-        : '\n✨ Cliente nuevo registrado\n\n';
 
       Alert.alert(
         '✅ Pedido Guardado',
         `\n${listaProductos}${resumenIcopores}\n\n💰 Total: $${totalPedido.toLocaleString('es-CO')}`,
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Limpiar formulario
-              setProductosSeleccionados([]);
-              setCantidadIcopores(0);
-              setGuardandoPedido(false);
-              router.back();
-            }
+        [{
+          text: 'OK', onPress: () => {
+            setProductosSeleccionados([]);
+            setCantidadIcopores(1);
+            setMesaSeleccionada(null);
+            setGuardandoPedido(false);
+            router.back();
           }
-        ]
+        }]
       );
     } catch (error) {
       console.error('Error general:', error);
@@ -453,9 +494,32 @@ export default function DomiciliosScreen() {
             </ThemedView>
           </ThemedView>
 
+          {/* Selección de Mesa */}
+          <ThemedView style={styles.icoporesSection}>
+            <ThemedView style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Layout.spacing.m, gap: 8 }}>
+              <IconSymbol name="table.furniture.fill" size={24} color="#FF8C00" />
+              <ThemedText style={[styles.seccionTitulo, { marginBottom: 0 }]}>Asociar a Mesa (Opcional)</ThemedText>
+            </ThemedView>
+            <TouchableOpacity
+              style={[styles.icoporesCard, { borderWidth: 1, borderColor: '#FFE0B2', backgroundColor: '#FFF3E0' }]}
+              onPress={() => setModalMesaVisible(true)}
+              activeOpacity={0.7}
+            >
+              <ThemedText style={[styles.icoporesTexto, { color: '#E65100', flex: 1 }]}>
+                {mesaSeleccionada ? `Mesa ${mesaSeleccionada}` : 'Ninguna mesa seleccionada'}
+              </ThemedText>
+              <ThemedView style={{ backgroundColor: '#FF8C00', padding: 8, borderRadius: 20 }}>
+                <IconSymbol name="chevron.right" size={20} color="#fff" />
+              </ThemedView>
+            </TouchableOpacity>
+          </ThemedView>
+
           {/* Icopores */}
           <ThemedView style={styles.icoporesSection}>
-            <ThemedText style={styles.seccionTitulo}>🥡 Icopores</ThemedText>
+            <ThemedView style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Layout.spacing.m, gap: 8 }}>
+              <IconSymbol name="takeoutbag.and.cup.and.straw.fill" size={24} color="#FF8C00" />
+              <ThemedText style={[styles.seccionTitulo, { marginBottom: 0 }]}>Icopores</ThemedText>
+            </ThemedView>
             <ThemedView style={styles.icoporesCard}>
               <ThemedView style={styles.icoporesInfo}>
                 <ThemedText style={styles.icoporesTexto}>Icopor</ThemedText>
@@ -545,32 +609,45 @@ export default function DomiciliosScreen() {
           {/* Resumen de Totales */}
           {(productosSeleccionados.length > 0 || cantidadIcopores > 0) && (
             <ThemedView style={styles.resumenSection}>
-              <ThemedText style={styles.seccionTitulo}>💰 Resumen</ThemedText>
+              {/* Header resumen */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: Layout.spacing.m, gap: 8 }}>
+                <IconSymbol name="dollarsign.circle.fill" size={28} color="#FF8C00" />
+                <ThemedText style={{ fontSize: Layout.fontSize.xl, fontWeight: 'bold', color: '#8B4513', backgroundColor: 'transparent' }}>Resumen del Pedido</ThemedText>
+              </View>
 
-              <ThemedView style={styles.resumenItem}>
-                <ThemedText style={styles.resumenLabel}>Subtotal Productos:</ThemedText>
-                <ThemedText style={styles.resumenValor}>
+              <View style={styles.resumenItem}>
+                <ThemedText style={[styles.resumenLabel, { backgroundColor: 'transparent' }]}>Subtotal Productos</ThemedText>
+                <ThemedText style={[styles.resumenValor, { backgroundColor: 'transparent' }]}>
                   ${calcularSubtotal().toLocaleString('es-CO')}
                 </ThemedText>
-              </ThemedView>
+              </View>
 
               {cantidadIcopores > 0 && (
-                <ThemedView style={styles.resumenItem}>
-                  <ThemedText style={styles.resumenLabel}>Icopores ({cantidadIcopores}):</ThemedText>
-                  <ThemedText style={styles.resumenValor}>
+                <View style={styles.resumenItem}>
+                  <ThemedText style={[styles.resumenLabel, { backgroundColor: 'transparent' }]}>Icopores ({cantidadIcopores}x)</ThemedText>
+                  <ThemedText style={[styles.resumenValor, { backgroundColor: 'transparent' }]}>
                     ${calcularTotalIcopores().toLocaleString('es-CO')}
                   </ThemedText>
-                </ThemedView>
+                </View>
               )}
 
-              <ThemedView style={styles.resumenDivider} />
+              <View style={styles.resumenDivider} />
 
-              <ThemedView style={styles.resumenItem}>
-                <ThemedText style={styles.resumenTotal}>TOTAL:</ThemedText>
-                <ThemedText style={styles.resumenTotalValor}>
+              <View style={styles.resumenItem}>
+                <ThemedText style={[styles.resumenTotal, { backgroundColor: 'transparent' }]}>TOTAL A PAGAR</ThemedText>
+                <ThemedText style={[styles.resumenTotalValor, { backgroundColor: 'transparent' }]}>
                   ${calcularTotal().toLocaleString('es-CO')}
                 </ThemedText>
-              </ThemedView>
+              </View>
+
+              {/* Botón Detalles */}
+              <TouchableOpacity
+                style={{ marginTop: Layout.spacing.m, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFF3E0', borderWidth: 1, borderColor: '#FFD580', paddingVertical: 10, borderRadius: 12 }}
+                onPress={() => setModalDetallesVisible(true)}
+              >
+                <IconSymbol name="list.bullet.rectangle.fill" size={20} color="#E65100" />
+                <ThemedText style={{ color: '#E65100', fontWeight: 'bold', fontSize: Layout.fontSize.m, backgroundColor: 'transparent' }}>Ver Detalles del Pedido</ThemedText>
+              </TouchableOpacity>
             </ThemedView>
           )}
 
@@ -678,6 +755,154 @@ export default function DomiciliosScreen() {
                 <ThemedText style={styles.modalCerrarTexto}>Cancelar</ThemedText>
               </TouchableOpacity>
             </ThemedView>
+          </ThemedView>
+        </ThemedView>
+      </Modal>
+
+      {/* Modal de Selección de Mesa */}
+      <Modal
+        visible={modalMesaVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setModalMesaVisible(false)}
+      >
+        <ThemedView style={styles.modalOverlay}>
+          <ThemedView style={[styles.modalContent, { padding: 0, overflow: 'hidden', backgroundColor: '#fff' }]}>
+            {/* Header */}
+            <ThemedView style={{ backgroundColor: '#FFF8F0', padding: 20, width: '100%', borderBottomWidth: 1, borderBottomColor: '#FFE0B2', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <ThemedText style={[styles.modalTitulo, { marginBottom: 0, color: '#E65100' }]}>🪑 Asociar Mesa</ThemedText>
+              <TouchableOpacity onPress={() => setModalMesaVisible(false)} style={{ padding: 4 }}>
+                <IconSymbol name="xmark.circle.fill" size={28} color="#FF8C00" />
+              </TouchableOpacity>
+            </ThemedView>
+
+            {/* Opciones */}
+            <ScrollView style={{ width: '100%', maxHeight: 400 }} contentContainerStyle={{ padding: 20 }}>
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row', alignItems: 'center', padding: 16,
+                  backgroundColor: mesaSeleccionada === null ? '#FF8C00' : '#FFF3E0',
+                  borderColor: mesaSeleccionada === null ? '#E65100' : '#FFE0B2',
+                  borderWidth: 1, borderRadius: 16, marginBottom: 12,
+                  elevation: mesaSeleccionada === null ? 3 : 0, shadowColor: '#FF8C00', shadowOpacity: 0.3, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }
+                }}
+                onPress={() => setMesaSeleccionada(null)}
+                activeOpacity={0.8}
+              >
+                <IconSymbol name="xmark.circle" size={24} color={mesaSeleccionada === null ? '#FFF' : '#FF8C00'} style={{ marginRight: 12 }} />
+                <ThemedText style={{ fontSize: Layout.fontSize.l, fontWeight: 'bold', flex: 1, color: mesaSeleccionada === null ? '#FFF' : '#8B4513' }}>Ninguna (Llevar normal)</ThemedText>
+              </TouchableOpacity>
+
+              {mesas.map((m) => (
+                <TouchableOpacity
+                  key={m.id}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', padding: 16,
+                    backgroundColor: mesaSeleccionada === m.numero_mesa ? '#FF8C00' : '#FFF3E0',
+                    borderColor: mesaSeleccionada === m.numero_mesa ? '#E65100' : '#FFE0B2',
+                    borderWidth: 1, borderRadius: 16, marginBottom: 12,
+                    elevation: mesaSeleccionada === m.numero_mesa ? 3 : 0, shadowColor: '#FF8C00', shadowOpacity: 0.3, shadowRadius: 3, shadowOffset: { width: 0, height: 2 }
+                  }}
+                  onPress={() => setMesaSeleccionada(m.numero_mesa)}
+                  activeOpacity={0.8}
+                >
+                  <IconSymbol name="table.furniture.fill" size={24} color={mesaSeleccionada === m.numero_mesa ? '#FFF' : '#FF8C00'} style={{ marginRight: 12 }} />
+                  <ThemedText style={{ fontSize: Layout.fontSize.l, fontWeight: 'bold', flex: 1, color: mesaSeleccionada === m.numero_mesa ? '#FFF' : '#8B4513' }}>Mesa {m.numero_mesa}</ThemedText>
+                  {m.estado !== 'disponible' && (
+                    <ThemedView style={{ backgroundColor: mesaSeleccionada === m.numero_mesa ? 'rgba(255,255,255,0.3)' : '#FFCC80', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                      <ThemedText style={{ fontSize: Layout.fontSize.s, color: mesaSeleccionada === m.numero_mesa ? '#FFF' : '#E65100', fontWeight: 'bold' }}>{m.estado}</ThemedText>
+                    </ThemedView>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Footer con Confirmar */}
+            <ThemedView style={{ padding: 20, width: '100%', borderTopWidth: 1, borderTopColor: '#f0f0f0', backgroundColor: '#fff' }}>
+              <TouchableOpacity
+                style={{ backgroundColor: '#4CAF50', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, elevation: 2, shadowColor: '#4CAF50', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4 }}
+                onPress={() => setModalMesaVisible(false)}
+              >
+                <IconSymbol name="checkmark.circle.fill" size={24} color="#fff" />
+                <ThemedText style={{ color: '#fff', fontSize: Layout.fontSize.l, fontWeight: 'bold', backgroundColor: 'transparent' }}>Confirmar</ThemedText>
+              </TouchableOpacity>
+            </ThemedView>
+          </ThemedView>
+        </ThemedView>
+      </Modal>
+      {/* Modal Detalles del Pedido */}
+      <Modal
+        visible={modalDetallesVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalDetallesVisible(false)}
+      >
+        <ThemedView style={styles.modalOverlay}>
+          <ThemedView style={[styles.modalContent, { padding: 0, overflow: 'hidden', backgroundColor: '#fff', maxHeight: '85%' }]}>
+            {/* Header */}
+            <View style={{ backgroundColor: '#FFF8F0', padding: 20, borderBottomWidth: 1, borderBottomColor: '#FFE0B2', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <IconSymbol name="list.bullet.rectangle.fill" size={24} color="#E65100" />
+                <ThemedText style={{ fontSize: Layout.fontSize.xl, fontWeight: 'bold', color: '#E65100', backgroundColor: 'transparent' }}>Detalle del Pedido</ThemedText>
+              </View>
+              <TouchableOpacity onPress={() => setModalDetallesVisible(false)} style={{ padding: 4 }}>
+                <IconSymbol name="xmark.circle.fill" size={28} color="#FF8C00" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: 20 }}>
+              {/* Tipo de pedido */}
+              <View style={{ backgroundColor: '#FFF3E0', borderRadius: 12, padding: 14, marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <IconSymbol name="bag.fill" size={22} color="#FF8C00" />
+                <ThemedText style={{ fontWeight: 'bold', color: '#8B4513', fontSize: Layout.fontSize.l, backgroundColor: 'transparent' }}>
+                  {mesaSeleccionada ? `Llevar - Mesa ${mesaSeleccionada}` : 'Para Llevar'}
+                </ThemedText>
+              </View>
+
+              {/* Productos */}
+              <ThemedText style={{ fontSize: Layout.fontSize.l, fontWeight: 'bold', color: '#8B4513', backgroundColor: 'transparent', marginBottom: 10 }}>🛒 Productos</ThemedText>
+              {productosSeleccionados.map((p, i) => (
+                <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#FFF3E0' }}>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={{ fontWeight: 'bold', color: '#3E2723', fontSize: Layout.fontSize.m, backgroundColor: 'transparent' }}>{p.nombre}</ThemedText>
+                    <ThemedText style={{ color: '#888', fontSize: Layout.fontSize.s, backgroundColor: 'transparent' }}>{p.tamano} · ${p.precio.toLocaleString('es-CO')} c/u · x{p.cantidad}</ThemedText>
+                  </View>
+                  <ThemedText style={{ fontWeight: 'bold', color: '#E65100', fontSize: Layout.fontSize.m, backgroundColor: 'transparent' }}>
+                    ${(p.precio * p.cantidad).toLocaleString('es-CO')}
+                  </ThemedText>
+                </View>
+              ))}
+
+              {/* Icopores */}
+              {cantidadIcopores > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#FFF3E0' }}>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={{ fontWeight: 'bold', color: '#3E2723', fontSize: Layout.fontSize.m, backgroundColor: 'transparent' }}>Icopores</ThemedText>
+                    <ThemedText style={{ color: '#888', fontSize: Layout.fontSize.s, backgroundColor: 'transparent' }}>${PRECIO_ICOPOR.toLocaleString('es-CO')} c/u · x{cantidadIcopores}</ThemedText>
+                  </View>
+                  <ThemedText style={{ fontWeight: 'bold', color: '#E65100', fontSize: Layout.fontSize.m, backgroundColor: 'transparent' }}>
+                    ${calcularTotalIcopores().toLocaleString('es-CO')}
+                  </ThemedText>
+                </View>
+              )}
+
+              {/* Total */}
+              <View style={{ backgroundColor: '#FFF3E0', borderRadius: 12, padding: 16, marginTop: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <ThemedText style={{ fontSize: Layout.fontSize.xl, fontWeight: '900', color: '#D84315', backgroundColor: 'transparent' }}>TOTAL A PAGAR</ThemedText>
+                <ThemedText style={{ fontSize: 26, fontWeight: '900', color: '#D84315', backgroundColor: 'transparent' }}>${calcularTotal().toLocaleString('es-CO')}</ThemedText>
+              </View>
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={{ padding: 20, borderTopWidth: 1, borderTopColor: '#f0f0f0' }}>
+              <TouchableOpacity
+                style={{ backgroundColor: '#4CAF50', paddingVertical: 14, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, elevation: 2 }}
+                onPress={() => setModalDetallesVisible(false)}
+              >
+                <IconSymbol name="checkmark.circle.fill" size={24} color="#fff" />
+                <ThemedText style={{ color: '#fff', fontSize: Layout.fontSize.l, fontWeight: 'bold', backgroundColor: 'transparent' }}>Entendido</ThemedText>
+              </TouchableOpacity>
+            </View>
           </ThemedView>
         </ThemedView>
       </Modal>
@@ -961,40 +1186,47 @@ const styles = StyleSheet.create({
   resumenSection: {
     marginHorizontal: Layout.spacing.l,
     marginBottom: Layout.spacing.xl,
-    backgroundColor: '#FFF8E1',
-    padding: Layout.spacing.l,
+    backgroundColor: '#FFF8F0',
+    padding: Layout.spacing.xl,
     borderRadius: Layout.borderRadius.xl,
-    borderWidth: 1,
-    borderColor: '#FFE0B2',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   resumenItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: Layout.spacing.m,
   },
   resumenLabel: {
     fontSize: Layout.fontSize.m,
-    color: '#5D4037',
+    color: '#8B4513',
+    fontWeight: '500',
   },
   resumenValor: {
-    fontSize: Layout.fontSize.m,
-    fontWeight: '600',
+    fontSize: Layout.fontSize.l,
+    fontWeight: '700',
     color: '#3E2723',
   },
   resumenDivider: {
-    height: 1,
-    backgroundColor: '#FFE0B2',
+    height: 2,
+    backgroundColor: '#FFDEAD',
     marginVertical: Layout.spacing.m,
+    borderRadius: 1,
+    borderStyle: 'dashed',
   },
   resumenTotal: {
     fontSize: Layout.fontSize.xl,
-    fontWeight: 'bold',
-    color: '#E65100',
+    fontWeight: '900',
+    color: '#D84315',
   },
   resumenTotalValor: {
-    fontSize: Layout.fontSize.xl,
-    fontWeight: 'bold',
-    color: '#E65100',
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#D84315',
   },
   actionsContainer: {
     flexDirection: 'row',

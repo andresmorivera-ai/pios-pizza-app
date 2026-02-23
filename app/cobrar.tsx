@@ -5,10 +5,12 @@ import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
 import { Orden, useOrdenes } from '@/utilidades/context/OrdenesContext';
 import { useColorScheme } from '@/utilidades/hooks/use-color-scheme';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Interfaz para órdenes generales desde Supabase
@@ -19,7 +21,7 @@ interface OrdenGeneral {
   productos: string[];
   total: number;
   estado: string;
-  created_at: string;
+  creado_en: string;
 }
 
 export default function CobrarScreen() {
@@ -118,34 +120,45 @@ export default function CobrarScreen() {
   };
 
   // Renderizar cada orden de mesa pendiente
-  const renderOrdenMesa = ({ item }: { item: Orden }) => (
-    <View style={styles.ordenCard}>
-      <View style={styles.ordenHeader}>
-        <View style={styles.mesaContainer}>
-          <IconSymbol name="table.furniture.fill" size={20} color="#8B4513" />
-          <ThemedText style={styles.mesaText}>Mesa {item.mesa}</ThemedText>
+  const renderOrdenMesa = ({ item }: { item: Orden }) => {
+    const itemsLlevar = item.productos.filter(p => p.startsWith('[Llevar]')).length;
+    const itemsMesa = item.productos.length - itemsLlevar;
+
+    return (
+      <View style={styles.ordenCard}>
+        <View style={styles.ordenHeader}>
+          <View style={styles.mesaContainer}>
+            <IconSymbol name="table.furniture.fill" size={20} color="#8B4513" />
+            <ThemedText style={styles.mesaText}>Mesa {item.mesa}</ThemedText>
+            {itemsLlevar > 0 && (
+              <View style={{ backgroundColor: '#FF8C00', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <IconSymbol name="bag.fill" size={12} color="#fff" />
+                <ThemedText style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>{itemsLlevar} llevar</ThemedText>
+              </View>
+            )}
+          </View>
+          <ThemedText style={styles.totalText}>${item.total.toLocaleString()}</ThemedText>
         </View>
-        <ThemedText style={styles.totalText}>${item.total.toLocaleString()}</ThemedText>
-      </View>
 
-      <View style={styles.ordenInfo}>
-        <ThemedText style={styles.itemsText}>
-          {item.productos.length} {item.productos.length === 1 ? 'item' : 'items'}
-        </ThemedText>
-        <ThemedText style={styles.fechaText}>
-          {item.fechaCreacion.toLocaleString()}
-        </ThemedText>
-      </View>
+        <View style={styles.ordenInfo}>
+          <ThemedText style={styles.itemsText}>
+            {itemsMesa > 0 ? `🍽️ ${itemsMesa} en mesa` : ''}{itemsMesa > 0 && itemsLlevar > 0 ? '  •  ' : ''}{itemsLlevar > 0 ? `🛍️ ${itemsLlevar} para llevar` : ''}
+          </ThemedText>
+          <ThemedText style={styles.fechaText}>
+            {item.fechaCreacion.toLocaleString()}
+          </ThemedText>
+        </View>
 
-      <TouchableOpacity
-        style={styles.cobrarButton}
-        onPress={() => handleCobrarOrden(item)}
-      >
-        <IconSymbol name="creditcard.fill" size={20} color="#fff" />
-        <ThemedText style={styles.cobrarButtonText}>Cobrar $</ThemedText>
-      </TouchableOpacity>
-    </View>
-  );
+        <TouchableOpacity
+          style={styles.cobrarButton}
+          onPress={() => handleCobrarOrden(item)}
+        >
+          <IconSymbol name="creditcard.fill" size={20} color="#fff" />
+          <ThemedText style={styles.cobrarButtonText}>Cobrar $</ThemedText>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   // Renderizar cada orden general pendiente
   const renderOrdenGeneral = ({ item }: { item: OrdenGeneral }) => (
@@ -164,8 +177,28 @@ export default function CobrarScreen() {
 
       {item.referencia && (
         <View style={styles.referenciaContainer}>
-          <IconSymbol name="info.circle" size={14} color="#666" />
-          <ThemedText style={styles.referenciaText}>{item.referencia}</ThemedText>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', flex: 1, paddingRight: 10 }}>
+            <IconSymbol name="location.fill" size={14} color="#FF8C00" style={{ marginTop: 2 }} />
+            <ThemedText style={styles.referenciaText}>{item.referencia}</ThemedText>
+          </View>
+          <TouchableOpacity
+            onPress={async () => {
+              await Clipboard.setStringAsync(item.referencia || '');
+              Alert.alert('¡Copiado!', 'Dirección copiada al portapapeles');
+            }}
+            style={{
+              backgroundColor: '#FF8C00',
+              padding: 8,
+              borderRadius: 8,
+              elevation: 2,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.2,
+              shadowRadius: 2,
+            }}
+          >
+            <Ionicons name="copy-outline" size={16} color="#FFF" />
+          </TouchableOpacity>
         </View>
       )}
 
@@ -174,7 +207,7 @@ export default function CobrarScreen() {
           {item.productos.length} {item.productos.length === 1 ? 'item' : 'items'}
         </ThemedText>
         <ThemedText style={styles.fechaText}>
-          {new Date(item.created_at).toLocaleString()}
+          {new Date(item.creado_en).toLocaleString()}
         </ThemedText>
       </View>
 
@@ -191,10 +224,14 @@ export default function CobrarScreen() {
   return (
     <ThemedView style={styles.container}>
       {/* Header */}
-      <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 40, 40) }]}>
+      <ThemedView style={[styles.header, { paddingTop: Math.max(insets.top + 20, 20) }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <IconSymbol name="arrow.left" size={28} color="#8B4513" />
+        </TouchableOpacity>
         <ThemedText type="title" style={styles.title}>
           Órdenes por pagar
         </ThemedText>
+        <View style={styles.placeholder} />
       </ThemedView>
 
       {/* Lista de órdenes pendientes */}
@@ -239,9 +276,15 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Layout.spacing.l,
     paddingBottom: Layout.spacing.l,
+  },
+  backButton: {
+    padding: Layout.spacing.s,
+  },
+  placeholder: {
+    width: 40,
   },
   title: {
     fontSize: Layout.fontSize.xxl,
