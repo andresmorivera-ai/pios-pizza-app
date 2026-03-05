@@ -4,8 +4,9 @@ import { IconSymbol } from '@/componentes/ui/icon-symbol';
 import { Layout } from '@/configuracion/constants/Layout';
 import { supabase } from '@/scripts/lib/supabase';
 import { useAuth } from '@/utilidades/context/AuthContext';
+import { useFocusEffect } from '@react-navigation/native';
 import { Link, router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Modal, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -98,6 +99,53 @@ export default function SeleccionarMesaScreen() {
     }
   };
 
+  // Detecta mesas atascadas (pago / pendiente_por_pagar) sin orden activa y las libera
+  const sanearEstadoMesas = async (mesasActuales: Mesa[]) => {
+    const estadosOcupados: Mesa['estado'][] = ['pago', 'pendiente_por_pagar', 'pendiente', 'en_preparacion', 'listo', 'entregado'];
+    const mesasOcupadas = mesasActuales.filter(m => estadosOcupados.includes(m.estado));
+
+    if (mesasOcupadas.length === 0) return;
+
+    const numerosOcupados = mesasOcupadas.map(m => m.numero_mesa.toString());
+
+    // Buscar ordenes activas (no pagadas) para esas mesas
+    const { data: ordenesActivas } = await supabase
+      .from('ordenes')
+      .select('mesa, estado')
+      .in('mesa', numerosOcupados)
+      .neq('estado', 'pago');
+
+    const mesasConOrdenActiva = new Set((ordenesActivas || []).map((o: any) => o.mesa));
+
+    // Mesas que están marcadas como ocupadas pero NO tienen orden activa
+    const mesasAtascadas = mesasOcupadas.filter(
+      m => !mesasConOrdenActiva.has(m.numero_mesa.toString())
+    );
+
+    if (mesasAtascadas.length === 0) return;
+
+    console.log('[SANEAR] Mesas atascadas detectadas:', mesasAtascadas.map(m => `Mesa ${m.numero_mesa} (${m.estado})`));
+
+    // Resetear en paralelo
+    await Promise.all(
+      mesasAtascadas.map(m =>
+        supabase
+          .from('mesas')
+          .update({ estado: 'disponible', ultima_actualizacion: new Date().toISOString() })
+          .eq('numero_mesa', m.numero_mesa)
+      )
+    );
+
+    // Actualizar estado local inmediatamente
+    setMesas(prev =>
+      prev.map(m =>
+        mesasAtascadas.find(a => a.id === m.id)
+          ? { ...m, estado: 'disponible' as const }
+          : m
+      )
+    );
+  };
+
   // Carga inicial
   const cargarMesas = async () => {
     try {
@@ -115,6 +163,9 @@ export default function SeleccionarMesaScreen() {
         const unique = Array.from(new Map(data.map((m: Mesa) => [m.id, m])).values());
         setMesas(unique);
         setErrorMesas(null);
+
+        // Sanear mesas que puedan estar atascadas en un estado ocupado sin orden real
+        await sanearEstadoMesas(unique as Mesa[]);
       }
     } catch (error) {
       logError('Error cargando mesas', error);
@@ -171,28 +222,17 @@ export default function SeleccionarMesaScreen() {
       })
       .subscribe();
 
-    // ⚠️ Deshabilitado para evitar race conditions con OrdenesContext
-    // El contexto ya actualiza la mesa directamente
-    /*
-    const canalOrdenes = supabase
-      .channel('ordenes-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes' }, async (payload) => {
-        const nuevaOrden = payload.new as { mesa?: string };
-        if (nuevaOrden?.mesa) {
-          const mesaNumero = parseInt(nuevaOrden.mesa);
-          if (!isNaN(mesaNumero)) {
-            await actualizarEstadoMesaDesdeOrden(mesaNumero);
-          }
-        }
-      })
-      .subscribe();
-    */
-
     return () => {
       supabase.removeChannel(canalMesas);
-      // supabase.removeChannel(canalOrdenes);
     };
   }, []);
+
+  // Recargar y sanear mesas cada vez que la pantalla gana foco
+  useFocusEffect(
+    useCallback(() => {
+      cargarMesas();
+    }, [])
+  );
 
   //  Seleccionar mesa
   const handleSeleccionarMesa = (numeroMesa: number) => {

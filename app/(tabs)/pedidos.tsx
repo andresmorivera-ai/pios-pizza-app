@@ -404,33 +404,36 @@ export default function OrdenesUnificadasScreen() {
                         const productoLimpio = productoConPrecio.split(' $')[0].trim();
 
                         const esProductoNuevo = orden.productosNuevos?.includes(index);
+                        const esProductoListo = orden.productosListos?.includes(index);
+                        const esProductoEntregado = orden.productosEntregados?.includes(index);
 
                         return (
-                            <ThemedView key={index} style={styles.productoItemContainer}>
-                                <ThemedView style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                                    <ThemedText style={styles.productoItem}>
+                            <ThemedView key={index} style={[styles.productoItemContainer, esProductoEntregado && { opacity: 0.6 }]}>
+                                <ThemedView style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexWrap: 'wrap' }}>
+                                    <ThemedText style={[
+                                        styles.productoItem,
+                                        esProductoEntregado && { textDecorationLine: 'line-through' },
+                                        esProductoNuevo && { color: '#B71C1C', fontWeight: 'bold' }
+                                    ]}>
                                         • {productoLimpio}
                                     </ThemedText>
-                                    {esProductoNuevo && (
-                                        <ThemedView style={{
-                                            backgroundColor: '#D32F2F', // Rojo
-                                            paddingHorizontal: 6,
-                                            paddingVertical: 2,
-                                            borderRadius: 4,
-                                            marginLeft: 8
-                                        }}>
-                                            <ThemedText style={{
-                                                fontSize: 10,
-                                                fontWeight: 'bold',
-                                                color: '#FFFFFF' // Blanco
-                                            }}>
-                                                NUEVO
-                                            </ThemedText>
+
+                                    {esProductoEntregado ? (
+                                        <ThemedView style={{ backgroundColor: '#E8F5E9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 }}>
+                                            <ThemedText style={{ fontSize: 10, fontWeight: 'bold', color: '#4CAF50' }}>✔ ENTREGADO</ThemedText>
                                         </ThemedView>
-                                    )}
+                                    ) : esProductoListo ? (
+                                        <ThemedView style={{ backgroundColor: '#FFF3E0', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 }}>
+                                            <ThemedText style={{ fontSize: 10, fontWeight: 'bold', color: '#E65100' }}>✔ LISTO</ThemedText>
+                                        </ThemedView>
+                                    ) : esProductoNuevo ? (
+                                        <ThemedView style={{ backgroundColor: '#FFEBEE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 }}>
+                                            <ThemedText style={{ fontSize: 10, fontWeight: 'bold', color: '#D32F2F' }}>🔥 NUEVO</ThemedText>
+                                        </ThemedView>
+                                    ) : null}
                                 </ThemedView>
                                 {cantidad && (
-                                    <ThemedView style={styles.cantidadBadge}>
+                                    <ThemedView style={[styles.cantidadBadge, esProductoEntregado && { backgroundColor: '#9E9E9E' }]}>
                                         <ThemedText style={styles.cantidadBadgeTexto}>
                                             X{cantidad}
                                         </ThemedText>
@@ -568,33 +571,36 @@ export default function OrdenesUnificadasScreen() {
                         const productoLimpio = productoConPrecio.split(' $')[0].trim();
 
                         const esProductoNuevo = orden.productos_nuevos?.includes(index);
+                        const esProductoListo = orden.productos_listos?.includes(index);
+                        const esProductoEntregado = orden.productos_entregados?.includes(index);
 
                         return (
-                            <ThemedView key={index} style={styles.productoItemContainer}>
-                                <ThemedView style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                                    <ThemedText style={styles.productoItem}>
+                            <ThemedView key={index} style={[styles.productoItemContainer, esProductoEntregado && { opacity: 0.6 }]}>
+                                <ThemedView style={{ flexDirection: 'row', alignItems: 'center', flex: 1, flexWrap: 'wrap' }}>
+                                    <ThemedText style={[
+                                        styles.productoItem,
+                                        esProductoEntregado && { textDecorationLine: 'line-through' },
+                                        esProductoNuevo && { color: '#B71C1C', fontWeight: 'bold' }
+                                    ]}>
                                         • {productoLimpio}
                                     </ThemedText>
-                                    {esProductoNuevo && (
-                                        <ThemedView style={{
-                                            backgroundColor: '#D32F2F', // Rojo
-                                            paddingHorizontal: 6,
-                                            paddingVertical: 2,
-                                            borderRadius: 4,
-                                            marginLeft: 8
-                                        }}>
-                                            <ThemedText style={{
-                                                fontSize: 10,
-                                                fontWeight: 'bold',
-                                                color: '#FFFFFF' // Blanco
-                                            }}>
-                                                NUEVO
-                                            </ThemedText>
+
+                                    {esProductoEntregado ? (
+                                        <ThemedView style={{ backgroundColor: '#E8F5E9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 }}>
+                                            <ThemedText style={{ fontSize: 10, fontWeight: 'bold', color: '#4CAF50' }}>✔ ENTREGADO</ThemedText>
                                         </ThemedView>
-                                    )}
+                                    ) : esProductoListo ? (
+                                        <ThemedView style={{ backgroundColor: '#FFF3E0', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 }}>
+                                            <ThemedText style={{ fontSize: 10, fontWeight: 'bold', color: '#E65100' }}>✔ LISTO</ThemedText>
+                                        </ThemedView>
+                                    ) : esProductoNuevo ? (
+                                        <ThemedView style={{ backgroundColor: '#FFEBEE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 }}>
+                                            <ThemedText style={{ fontSize: 10, fontWeight: 'bold', color: '#D32F2F' }}>🔥 NUEVO</ThemedText>
+                                        </ThemedView>
+                                    ) : null}
                                 </ThemedView>
                                 {cantidad && (
-                                    <ThemedView style={styles.cantidadBadge}>
+                                    <ThemedView style={[styles.cantidadBadge, esProductoEntregado && { backgroundColor: '#9E9E9E' }]}>
                                         <ThemedText style={styles.cantidadBadgeTexto}>
                                             X{cantidad}
                                         </ThemedText>

@@ -1,8 +1,57 @@
 import { supabase } from '@/scripts/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
+import * as Notifications from 'expo-notifications';
 import { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { Alert, Vibration } from 'react-native';
 import { useAuth } from './AuthContext';
+
+// Configurar cómo se manejan las notificaciones cuando la app está en primer plano
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+const reproducirSonidoListo = async () => {
+  try {
+    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    const { sound } = await Audio.Sound.createAsync(
+      require('../../assets/ding.wav')
+    );
+    await sound.playAsync();
+    // Liberar el recurso cuando termine
+    sound.setOnPlaybackStatusUpdate((status) => {
+      if (status.isLoaded && status.didJustFinish) {
+        sound.unloadAsync();
+      }
+    });
+  } catch (e) {
+    // Silenciar errores de audio
+  }
+};
+
+const reproducirSonidoCocina = async () => {
+  try {
+    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    const { sound } = await Audio.Sound.createAsync(
+      require('../../assets/kitchen_alarm.wav')
+    );
+    await sound.playAsync();
+    // Liberar el recurso cuando termine
+    sound.setOnPlaybackStatusUpdate((status) => {
+      if (status.isLoaded && status.didJustFinish) {
+        sound.unloadAsync();
+      }
+    });
+  } catch (e) {
+    // Silenciar errores de audio
+  }
+};
 
 // ------------------- INTERFACES -------------------
 export interface Orden {
@@ -76,10 +125,15 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { usuario } = useAuth();
   const usuarioRef = useRef(usuario);
+  const ordenesRef = useRef<Orden[]>([]);
 
   useEffect(() => {
     usuarioRef.current = usuario;
   }, [usuario]);
+
+  useEffect(() => {
+    ordenesRef.current = ordenes;
+  }, [ordenes]);
 
   const getInicioYFinDia = () => {
     const hoy = new Date();
@@ -300,6 +354,25 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
               productosEntregados: nueva.productos_entregados || [],
             };
 
+            // Solo vibra para la cocina cuando llega un nuevo pedido o algo para preparar
+            if (usuarioRef.current?.rol_id === 3 && ordenNueva.estado === 'pendiente') {
+              try {
+                Vibration.vibrate([0, 800, 400, 800]);
+              } catch (error) {
+                // Silenciar error
+              }
+              reproducirSonidoCocina();
+              // Send notification for kitchen
+              await Notifications.scheduleNotificationAsync({
+                content: {
+                  title: 'Nueva Orden de Mesa 🍳',
+                  body: `Mesa ${ordenNueva.mesa} ha pedido nuevos productos.`,
+                  sound: true,
+                },
+                trigger: null,
+              });
+            }
+
             setOrdenes((prev) => {
               const nuevas = uniqueOrdersById([ordenNueva, ...prev]);
               guardarOrdenesEnStorage(nuevas);
@@ -341,12 +414,53 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
             const fechaCreacion = new Date(actualizada.fecha_creacion);
             if (fechaCreacion < inicioDia || fechaCreacion > finDia) return;
 
-            // Vibración para mesero cuando está listo
-            if (actualizada.estado === 'listo' && usuarioRef.current?.rol_id === 2) {
+            // Sonido + Vibración para mesero cuando está listo
+            if (actualizada.estado === 'listo' && (usuarioRef.current?.rol_id === 1 || usuarioRef.current?.rol_id === 2)) {
               try {
                 Vibration.vibrate([0, 500, 200, 500]);
               } catch (error) {
                 // Silenciar error de vibración
+              }
+              reproducirSonidoListo();
+              // Mostrar Push Notification para Mesero
+              Notifications.scheduleNotificationAsync({
+                content: {
+                  title: '¡Orden Lista! ✔️',
+                  body: `La orden de la Mesa ${actualizada.mesa} ya está lista en cocina.`,
+                  sound: true,
+                },
+                trigger: null,
+              });
+            }
+
+            // Sonido + Vibración para la cocina cuando hay algo para preparar (nuevos productos en pedido pendiente)
+            if (usuarioRef.current?.rol_id === 3 || usuarioRef.current?.rol_id === 4) {
+              const ordenPrevia = ordenesRef.current.find(o => o.id === actualizada.id);
+              if (ordenPrevia) {
+                const estadoAnterior = ordenPrevia.estado;
+                const estadoNuevo = mapEstadoBDToLocal(actualizada.estado);
+                const teniaNuevos = ordenPrevia.productosNuevos?.length || 0;
+                const tieneNuevos = actualizada.productos_nuevos?.length || 0;
+
+                const esNuevoPedido = estadoNuevo === 'pendiente' && estadoAnterior !== 'pendiente';
+                const tieneAlgoParaPreparar = estadoNuevo === 'pendiente' && tieneNuevos > teniaNuevos;
+
+                if (esNuevoPedido || tieneAlgoParaPreparar) {
+                  try {
+                    Vibration.vibrate([0, 800, 400, 800]);
+                  } catch (error) {
+                    // Solo silenciamos
+                  }
+                  reproducirSonidoCocina();
+                  Notifications.scheduleNotificationAsync({
+                    content: {
+                      title: '¡Actualización de Mesa! ⚠️',
+                      body: `Mesa ${actualizada.mesa} ha pedido más productos.`,
+                      sound: true,
+                    },
+                    trigger: null,
+                  });
+                }
               }
             }
 
@@ -490,10 +604,17 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
 
       // Preservar los índices de productos nuevos existentes
       const productosNuevosIndices: number[] = ordenActual?.productosNuevos ? [...ordenActual.productosNuevos] : [];
+      const productosListosIndices: number[] = ordenActual?.productosListos ? [...ordenActual.productosListos] : [];
+      const productosEntregadosIndices: number[] = ordenActual?.productosEntregados ? [...ordenActual.productosEntregados] : [];
 
       for (let i = 0; i < productosNuevos.length; i++) {
         if (i >= cantidadOriginal) {
           productosNuevosIndices.push(i);
+        } else {
+          // Auto-tachar productos anteriores marcándolos como listos, para que cocina solo se fije en los nuevos
+          if (!productosListosIndices.includes(i) && !productosEntregadosIndices.includes(i)) {
+            productosListosIndices.push(i);
+          }
         }
       }
 
@@ -504,6 +625,8 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
           total: totalNuevo,
           estado: 'pendiente',
           productos_nuevos: productosNuevosIndices,
+          productos_listos: productosListosIndices,
+          productos_entregados: productosEntregadosIndices
         })
         .eq('id', id);
 
@@ -514,25 +637,6 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
       setOrdenes(prev => {
         const nuevas = prev.map(orden => {
           if (orden.id === id) {
-            const cantidadOriginal = orden.productos.length;
-            const productosNuevosIndices: number[] = [];
-            const productosListosIndices: number[] = [];
-            const productosEntregadosIndices: number[] = [];
-
-            for (let i = 0; i < productosNuevos.length; i++) {
-              if (i >= cantidadOriginal) {
-                productosNuevosIndices.push(i);
-              } else {
-                if (orden.productosEntregados?.includes(i)) {
-                  productosEntregadosIndices.push(i);
-                } else if (orden.productosListos?.includes(i)) {
-                  productosListosIndices.push(i);
-                } else if (orden.productosNuevos?.includes(i)) {
-                  productosNuevosIndices.push(i);
-                }
-              }
-            }
-
             return {
               ...orden,
               productos: productosNuevos,
@@ -557,17 +661,39 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
   const procesarPago = async (id: string, metodoPago: 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta', idVenta?: string) => {
     try {
       const idString = String(id);
-      const ordenAPagar = ordenes.find(orden => String(orden.id) === idString);
+      let ordenAPagar = ordenes.find(orden => String(orden.id) === idString);
 
+      // Si no está en estado local (puede haber sido filtrada), buscarla en Supabase
       if (!ordenAPagar) {
-        Alert.alert('Error', 'Orden no encontrada');
-        return;
+        const { data: ordenBD } = await supabase
+          .from('ordenes')
+          .select('*')
+          .eq('id', idString)
+          .single();
+
+        if (!ordenBD) {
+          Alert.alert('Error', 'Orden no encontrada');
+          return;
+        }
+
+        ordenAPagar = {
+          id: ordenBD.id,
+          mesa: ordenBD.mesa,
+          productos: ordenBD.productos || [],
+          total: ordenBD.total,
+          estado: mapEstadoBDToLocal(ordenBD.estado),
+          fechaCreacion: new Date(ordenBD.fecha_creacion),
+          fechaEntrega: ordenBD.fecha_entrega ? new Date(ordenBD.fecha_entrega) : undefined,
+          metodoPago: ordenBD.metodo_pago,
+          idVenta: ordenBD.id_venta,
+        };
       }
 
-      // 1. Actualizar estado local a 'pago' (sin eliminar aún) y MANTENER en la lista visualmente
+      const mesaNumero = parseInt(ordenAPagar.mesa, 10);
+
+      // 1. Actualizar estado local a 'pago' y MANTENER en la lista visualmente 5s
       setOrdenes(prev => {
         const nuevas = prev.map(o => String(o.id) === idString ? { ...o, estado: 'pago' as const } : o);
-        // guardarOrdenesEnStorage filtrará los pagos, pero en memoria los mantenemos 5s
         return nuevas;
       });
 
@@ -579,29 +705,36 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
         idVenta
       };
 
-      setOrdenesEntregadas(prev => [...prev, ordenPagada]);
+      setOrdenesEntregadas(prev => {
+        const existe = prev.some(o => o.id === ordenPagada.id);
+        return existe ? prev : [...prev, ordenPagada];
+      });
 
-      // 2. Actualizar BD Orden a 'pago'
-      const { error } = await supabase
-        .from('ordenes')
-        .update({
-          estado: 'pago',
-          id_venta: idVenta,
-          fecha_entrega: new Date().toISOString(),
-        })
-        .eq('id', idString);
+      // 2 y 3. Actualizar BD Orden y Mesa a 'pago' en paralelo para mayor velocidad
+      const promesas = [
+        supabase
+          .from('ordenes')
+          .update({
+            estado: 'pago',
+            id_venta: idVenta,
+            fecha_entrega: new Date().toISOString(),
+          })
+          .eq('id', idString)
+      ];
 
-      if (error) {
-        logError('Error actualizando orden a pago en Supabase', error);
+      // Añadir promesa de mesa si el ID es válido
+      if (!isNaN(mesaNumero)) {
+        promesas.push(
+          supabase
+            .from('mesas')
+            .update({ estado: 'pago', ultima_actualizacion: new Date().toISOString() })
+            .eq('numero_mesa', mesaNumero)
+        );
       }
 
-      // 3. Actualizar BD Mesa a 'pago' (para que se vea verde/pagado)
-      await supabase
-        .from('mesas')
-        .update({ estado: 'pago' })
-        .eq('numero_mesa', ordenAPagar.mesa);
+      await Promise.all(promesas);
 
-      // 4. Esperar 5 segundos y limpiar
+      // 4. Esperar 3 segundos y liberar la mesa a 'disponible'
       setTimeout(async () => {
         // Limpiar de estado local
         setOrdenes(prev => {
@@ -611,11 +744,13 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
         });
 
         // Liberar mesa en BD
-        await supabase
-          .from('mesas')
-          .update({ estado: 'disponible' })
-          .eq('numero_mesa', ordenAPagar.mesa);
-      }, 5000);
+        if (!isNaN(mesaNumero)) {
+          await supabase
+            .from('mesas')
+            .update({ estado: 'disponible', ultima_actualizacion: new Date().toISOString() })
+            .eq('numero_mesa', mesaNumero);
+        }
+      }, 3000);
 
     } catch (error) {
       console.error('❌ Error en procesarPago:', error);
@@ -633,11 +768,46 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
       };
 
       if (
+        nuevoEstado === 'listo' ||
+        nuevoEstado === 'pendiente_por_pagar' ||
+        nuevoEstado === 'entregado' ||
+        nuevoEstado === 'pago'
+      ) {
+        // Al terminar preparación o finalizar, siempre limpiamos productos nuevos.
+        updateData.productos_nuevos = [];
+      }
+
+      if (
         nuevoEstado === 'pendiente_por_pagar' ||
         nuevoEstado === 'entregado' ||
         nuevoEstado === 'pago'
       ) {
         updateData.fecha_entrega = new Date().toISOString();
+      }
+
+      // Mirror complex state logic to DB if changing to 'listo', 'entregado' or 'pendiente_por_pagar'
+      if (nuevoEstado === 'listo') {
+        let productosListosActualizados = ordenAActualizar.productosListos || [];
+        const nuevosAListos = ordenAActualizar.productosNuevos || [];
+        productosListosActualizados = [...productosListosActualizados, ...nuevosAListos];
+        if (nuevosAListos.length === 0) {
+          productosListosActualizados = Array.from(
+            { length: ordenAActualizar.productos.length },
+            (_, i) => i
+          ).filter(i => !(ordenAActualizar.productosEntregados || []).includes(i));
+        }
+        updateData.productos_listos = productosListosActualizados;
+      } else if (nuevoEstado === 'entregado' || nuevoEstado === 'pendiente_por_pagar') {
+        let productosEntregadosActualizados = ordenAActualizar.productosEntregados || [];
+        const nuevosAEntregar = ordenAActualizar.productosNuevos || [];
+        const listosAEntregar = ordenAActualizar.productosListos || [];
+        const todosEntregados = new Set([
+          ...productosEntregadosActualizados,
+          ...listosAEntregar,
+          ...nuevosAEntregar
+        ]);
+        updateData.productos_entregados = Array.from(todosEntregados);
+        updateData.productos_listos = [];
       }
 
       const { error } = await supabase
@@ -668,13 +838,17 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
           return prev.map(o => o.id === id ? { ...o, estado: 'pago' } : o);
         });
 
-        // 1. Actualizar mesa a PAGO inmediatamente
-        await supabase
-          .from('mesas')
-          .update({ estado: 'pago' })
-          .eq('numero_mesa', ordenAActualizar.mesa);
+        const mesaNumeroPago = parseInt(ordenAActualizar.mesa, 10);
 
-        // 2. Timeout para limpiar
+        // 1. Actualizar mesa a PAGO inmediatamente usando número entero
+        if (!isNaN(mesaNumeroPago)) {
+          await supabase
+            .from('mesas')
+            .update({ estado: 'pago', ultima_actualizacion: new Date().toISOString() })
+            .eq('numero_mesa', mesaNumeroPago);
+        }
+
+        // 2. Timeout para limpiar y liberar mesa
         setTimeout(async () => {
           setOrdenes((prev) => {
             const sinPago = prev.filter((orden) => orden.id !== id);
@@ -683,12 +857,13 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
           });
 
           // Liberar mesa
-          await supabase
-            .from('mesas')
-            .update({ estado: 'disponible' })
-            .eq('numero_mesa', ordenAActualizar.mesa);
-
-        }, 5000);
+          if (!isNaN(mesaNumeroPago)) {
+            await supabase
+              .from('mesas')
+              .update({ estado: 'disponible', ultima_actualizacion: new Date().toISOString() })
+              .eq('numero_mesa', mesaNumeroPago);
+          }
+        }, 3000);
 
       } else {
         setOrdenes((prev) => {
@@ -745,10 +920,13 @@ export function OrdenesProvider({ children }: { children: ReactNode }) {
           return nuevas;
         });
 
-        await supabase
-          .from('mesas')
-          .update({ estado: nuevoEstado })
-          .eq('numero_mesa', ordenAActualizar.mesa);
+        const mesaNumeroEstado = parseInt(ordenAActualizar.mesa, 10);
+        if (!isNaN(mesaNumeroEstado)) {
+          await supabase
+            .from('mesas')
+            .update({ estado: nuevoEstado, ultima_actualizacion: new Date().toISOString() })
+            .eq('numero_mesa', mesaNumeroEstado);
+        }
       }
 
     } catch (error) {

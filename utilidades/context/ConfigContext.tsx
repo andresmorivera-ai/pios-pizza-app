@@ -1,15 +1,12 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/scripts/lib/supabase';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-
-// Constants
-const STORAGE_KEY_NEQUI = 'config_numero_nequi';
-const STORAGE_KEY_DAVIPLATA = 'config_numero_daviplata';
 
 // Context Values
 interface ConfigContextType {
     numeroNequi: string;
     numeroDaviplata: string;
     guardarNumeros: (nequi: string, daviplata: string) => Promise<void>;
+    cargarConfiguracion: () => Promise<void>;
     isLoading: boolean;
 }
 
@@ -20,14 +17,21 @@ export const ConfigProvider = ({ children }: { children: React.ReactNode }) => {
     const [numeroDaviplata, setNumeroDaviplata] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(true);
 
-    // Load from AsyncStorage
+    // Load from Supabase
     const cargarConfiguracion = async () => {
         try {
-            const savedNequi = await AsyncStorage.getItem(STORAGE_KEY_NEQUI);
-            const savedDaviplata = await AsyncStorage.getItem(STORAGE_KEY_DAVIPLATA);
+            const { data, error } = await supabase
+                .from('metodospago')
+                .select('*')
+                .limit(1)
+                .single();
 
-            if (savedNequi !== null) setNumeroNequi(savedNequi);
-            if (savedDaviplata !== null) setNumeroDaviplata(savedDaviplata);
+            if (data) {
+                setNumeroNequi(data.nequi || '');
+                setNumeroDaviplata(data.daviplata || '');
+            } else if (error && error.code !== 'PGRST116') {
+                console.error('Error fetching metodospago:', error);
+            }
         } catch (error) {
             console.error('Error al cargar configuración:', error);
         } finally {
@@ -39,16 +43,39 @@ export const ConfigProvider = ({ children }: { children: React.ReactNode }) => {
         cargarConfiguracion();
     }, []);
 
-    // Save to AsyncStorage
+    // Save to Supabase
     const guardarNumeros = async (nequi: string, daviplata: string) => {
         try {
-            await AsyncStorage.setItem(STORAGE_KEY_NEQUI, nequi);
-            await AsyncStorage.setItem(STORAGE_KEY_DAVIPLATA, daviplata);
+            // First check if a row exists
+            const { data: existingData } = await supabase
+                .from('metodospago')
+                .select('id')
+                .limit(1)
+                .maybeSingle();
+
+            // Convertir a null si están vacíos para evitar error con el tipo 'numeric' de la tabla
+            const dbNequi = nequi.trim() === '' ? null : Number(nequi);
+            const dbDaviplata = daviplata.trim() === '' ? null : Number(daviplata);
+
+            if (existingData?.id) {
+                // Update existing row
+                const { error } = await supabase
+                    .from('metodospago')
+                    .update({ nequi: dbNequi, daviplata: dbDaviplata })
+                    .eq('id', existingData.id);
+                if (error) throw error;
+            } else {
+                // Insert new row if none exists
+                const { error } = await supabase
+                    .from('metodospago')
+                    .insert([{ nequi: dbNequi, daviplata: dbDaviplata }]);
+                if (error) throw error;
+            }
 
             setNumeroNequi(nequi);
             setNumeroDaviplata(daviplata);
         } catch (error) {
-            console.error('Error al guardar configuración:', error);
+            console.error('Error al guardar configuración en BD:', error);
             throw error;
         }
     };
@@ -59,6 +86,7 @@ export const ConfigProvider = ({ children }: { children: React.ReactNode }) => {
                 numeroNequi,
                 numeroDaviplata,
                 guardarNumeros,
+                cargarConfiguracion,
                 isLoading,
             }}
         >

@@ -50,14 +50,47 @@ export default function DetallesCobroScreen() {
   // Usar el total directamente
   const totalFinal = total;
 
-  // Determinar si hay 3 o más productos
-  const tieneMuchosProductos = productos.length >= 3;
-  const productosAMostrar = productosExpandidos ? productos : productos.slice(0, 3);
+  // Agrupar productos idénticos
+  const agruparProductos = (prods: string[]) => {
+    const mapa = new Map<string, { cantidadTotal: number, precioUnitarioStr: string }>();
+    prods.forEach(item => {
+      // Extraer datos del item
+      const partes = item.split(' X');
+      const productoConPrecio = partes[0]; // e.g. "[Llevar] Producto (tamaño) $20000"
+      const cantidad = parseInt(partes[1] || '1', 10);
+
+      const precioMatch = productoConPrecio.match(/\$(\d+)/);
+      const precioUnitarioStr = precioMatch ? precioMatch[0] : '';
+
+      const productoNombre = productoConPrecio.replace(/\s*\$\d+$/, '').trim(); // e.g. "[Llevar] Producto (tamaño)"
+
+      const key = productoNombre;
+
+      if (mapa.has(key)) {
+        const existente = mapa.get(key)!;
+        existente.cantidadTotal += cantidad;
+      } else {
+        mapa.set(key, { cantidadTotal: cantidad, precioUnitarioStr });
+      }
+    });
+
+    const resultado: string[] = [];
+    mapa.forEach((val, key) => {
+      resultado.push(`${key} ${val.precioUnitarioStr} X${val.cantidadTotal}`);
+    });
+    return resultado;
+  };
+
+  const productosAgrupados = agruparProductos(productos);
+
+  // Determinar si hay 3 o más productos agrupados
+  const tieneMuchosProductos = productosAgrupados.length >= 3;
+  const productosAMostrar = productosExpandidos ? productosAgrupados : productosAgrupados.slice(0, 3);
 
 
   // Función para procesar productos y convertirlos al formato de la base de datos
   const procesarProductosParaBD = (): ProductoVenta[] => {
-    return productos.map(producto => {
+    return productosAgrupados.map(producto => {
       // Separar la cantidad si existe (formato: "Producto (tamaño) $20000 X2")
       const partes = producto.split(' X');
       const productoConPrecio = partes[0]; // "Producto (tamaño) $20000"
@@ -216,26 +249,22 @@ export default function DetallesCobroScreen() {
       const esOrdenGeneral = mesa.toLowerCase().includes('domicilio') || mesa.toLowerCase().includes('llevar');
 
       if (esOrdenGeneral) {
-        // Actualizar estado en ordenesgenerales
-        const { error } = await supabase
+        // Actualizar estado en ordenesgenerales sin bloquear (background)
+        supabase
           .from('ordenesgenerales')
           .update({ estado: 'pago' })
-          .eq('id', ordenId);
-
-        if (error) {
-          console.error('Error actualizando orden general:', error);
-          throw error;
-        }
+          .eq('id', ordenId)
+          .then(({ error }) => {
+            if (error) console.error('Error actualizando orden general:', error);
+          });
       } else {
-        // Procesar el pago usando la función del contexto (solo para mesas)
-        // IMPORTANTE: Usar venta.id (UUID) no idVenta (string personalizado)
-        await procesarPago(ordenId, metodoSeleccionado as 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta', resultadoVenta.venta.id);
+        // Procesar el pago usando la función del contexto sin bloquear (background)
+        procesarPago(ordenId, metodoSeleccionado as 'daviplata' | 'nequi' | 'efectivo' | 'tarjeta', resultadoVenta.venta.id);
       }
 
-      // Esperar un momento para que se propague el cambio (Removido para mayor velocidad)
-      // await new Promise(resolve => setTimeout(resolve, 500));
+      setProcesando(false);
 
-      // Mostrar confirmación
+      // Mostrar confirmación inmediatamente
       Alert.alert(
         'Pago Exitoso',
         `Orden cobrada exitosamente por $${total.toLocaleString()} usando ${metodosPago.find(m => m.id === metodoSeleccionado)?.nombre} \n\nID de Venta: ${resultadoVenta.idVenta} `,

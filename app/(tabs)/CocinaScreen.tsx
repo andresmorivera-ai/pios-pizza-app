@@ -47,7 +47,7 @@ export default function CocinaScreen() {
   }, []);
 
   const { ordenes, actualizarEstadoOrden } = useOrdenes();
-  const { logout } = useAuth();
+  const { usuario, logout } = useAuth();
   const [ordenExpandida, setOrdenExpandida] = useState<string | null>(null);
   const [ordenesGenerales, setOrdenesGenerales] = useState<OrdenGeneral[]>([]);
   const [ordenesVisibles, setOrdenesVisibles] = useState<OrdenUnificada[]>([]);
@@ -183,9 +183,18 @@ export default function CocinaScreen() {
       prev.map(o => o.id === ordenId ? { ...o, estado: nuevoEstado } : o)
     );
 
+    const updates: any = { estado: nuevoEstado };
+    if (nuevoEstado === 'pendiente_por_pagar' || nuevoEstado === 'listo' || nuevoEstado === 'pago') {
+      updates.productos_nuevos = [];
+      // Para limpiar visualmente también en local inmediatamente
+      setOrdenesGenerales(prev =>
+        prev.map(o => o.id === ordenId ? { ...o, productos_nuevos: [] } : o)
+      );
+    }
+
     const { error } = await supabase
       .from('ordenesgenerales')
-      .update({ estado: nuevoEstado })
+      .update(updates)
       .eq('id', ordenId);
 
     if (error) {
@@ -232,14 +241,14 @@ export default function CocinaScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Cerrar Sesión', '¿Estás seguro que deseas salir?', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert('Cerrar sesión', '¿Deseas cerrar sesion?', [
+      { text: 'No', style: 'cancel' },
       {
-        text: 'Salir',
+        text: 'Sí',
         style: 'destructive',
         onPress: async () => {
           await logout();
-          router.replace('/(tabs)');
+          router.replace('/loginAdmin');
         },
       },
     ]);
@@ -272,16 +281,23 @@ export default function CocinaScreen() {
     <ThemedView style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.iconContainer}>
-            <IconSymbol name="flame.fill" size={28} color="#FF4500" />
+        <View style={[styles.headerContent, { justifyContent: 'space-between' }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={styles.iconContainer}>
+              <IconSymbol name="flame.fill" size={28} color="#FF4500" />
+            </View>
+            <View>
+              <ThemedText type="title" style={styles.title}>Cocina</ThemedText>
+              <ThemedText style={styles.subtitulo}>
+                {ordenesVisibles.length} órdenes activas
+              </ThemedText>
+            </View>
           </View>
-          <View>
-            <ThemedText type="title" style={styles.title}>Cocina</ThemedText>
-            <ThemedText style={styles.subtitulo}>
-              {ordenesVisibles.length} órdenes activas
-            </ThemedText>
-          </View>
+          {usuario?.rol_id === 3 && (
+            <TouchableOpacity onPress={handleLogout} style={{ padding: 8, height: 46 }}>
+              <IconSymbol name="arrow.right.square.fill" size={30} color="#E65100" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -363,29 +379,38 @@ export default function CocinaScreen() {
                                       <ThemedText style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>🛍️ LLEVAR</ThemedText>
                                     </View>
                                   )}
-                                  <ThemedText style={styles.productoItem}>• {nombre}</ThemedText>
+                                  <ThemedText style={[
+                                    styles.productoItem,
+                                    (esProductoEntregado || esProductoListo) && { textDecorationLine: 'line-through', opacity: 0.5 },
+                                    esProductoNuevo && { color: '#B71C1C', fontWeight: 'bold' }
+                                  ]}>
+                                    • {nombre}
+                                  </ThemedText>
                                   {esProductoEntregado ? (
-                                    <View style={styles.productoStatus}>
+                                    <View style={[styles.productoStatus, { backgroundColor: '#E8F5E9' }]}>
                                       <ThemedText style={[styles.productoStatusText, styles.entregadoTexto]}>
-                                        Entregado
+                                        ✔ Entregado
                                       </ThemedText>
                                     </View>
                                   ) : esProductoListo ? (
-                                    <View style={styles.productoStatus}>
+                                    <View style={[styles.productoStatus, { backgroundColor: '#E8F5E9' }]}>
                                       <ThemedText style={[styles.productoStatusText, styles.listoTexto]}>
-                                        Listo
+                                        ✔ Listo
                                       </ThemedText>
                                     </View>
                                   ) : esProductoNuevo ? (
-                                    <View style={styles.productoStatus}>
+                                    <View style={[styles.productoStatus, { backgroundColor: '#FFEBEE' }]}>
                                       <ThemedText style={[styles.productoStatusText, { color: '#D32F2F' }]}>
-                                        Nuevo!
+                                        🔥 ¡Nuevo!
                                       </ThemedText>
                                     </View>
                                   ) : null}
                                 </View>
                                 {cantidad && (
-                                  <View style={styles.cantidadBadge}>
+                                  <View style={[
+                                    styles.cantidadBadge,
+                                    (esProductoEntregado || esProductoListo) && { backgroundColor: '#9E9E9E', opacity: 0.6 }
+                                  ]}>
                                     <ThemedText style={styles.cantidadBadgeTexto}>X{cantidad}</ThemedText>
                                   </View>
                                 )}

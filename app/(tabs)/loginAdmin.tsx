@@ -26,7 +26,7 @@ type Usuario = {
 };
 
 export default function LoginScreen() {
-  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<string>(''); // nombre
+  const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<string>('Mesero'); // nombre
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [contrasena, setContrasena] = useState('');
   const [cargando, setCargando] = useState(false);

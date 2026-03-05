@@ -326,18 +326,37 @@ export default function DomiciliosScreen() {
         const ordenMesa = getOrdenActivaPorMesa(String(mesaSeleccionada));
 
         if (ordenMesa) {
-          // ✅ La mesa tiene orden activa → fusionar preservando el estado actual
+          // ✅ La mesa tiene orden activa → fusionar y enviar a cocina los nuevos productos
           const productosPrefijados = productosFormateados.map(p => `[Llevar] ${p}`);
           const productosCombinados = [...ordenMesa.productos, ...productosPrefijados];
           const totalCombinado = ordenMesa.total + totalPedido;
 
-          // Update directo: solo cambia productos y total, NO toca el estado
-          // (actualizarProductosOrden del contexto resetea a 'pendiente' lo que saca la orden de cobrar)
+          // Calcular índices de los productos nuevos para que cocina los vea resaltados
+          const cantidadOriginal = ordenMesa.productos.length;
+          const indicesNuevos: number[] = ordenMesa.productosNuevos ? [...ordenMesa.productosNuevos] : [];
+          for (let i = cantidadOriginal; i < productosCombinados.length; i++) {
+            indicesNuevos.push(i);
+          }
+
+          // Auto-tachar (marcar como listos) los productos antiguos para que cocina solo se fije en los nuevos
+          const listosExistentes: number[] = ordenMesa.productosListos ? [...ordenMesa.productosListos] : [];
+          const entregadosExistentes: number[] = ordenMesa.productosEntregados || [];
+          for (let i = 0; i < cantidadOriginal; i++) {
+            if (!listosExistentes.includes(i) && !entregadosExistentes.includes(i)) {
+              listosExistentes.push(i);
+            }
+          }
+
+          // IMPORTANTE: actualizar estado a 'pendiente' y marcar productos_nuevos
+          // para que la cocina reciba y prepare el pedido para llevar
           const { error: errorUpdate } = await supabase
             .from('ordenes')
             .update({
               productos: productosCombinados,
               total: totalCombinado,
+              estado: 'pendiente',
+              productos_nuevos: indicesNuevos,
+              productos_listos: listosExistentes
             })
             .eq('id', ordenMesa.id);
 
@@ -349,8 +368,8 @@ export default function DomiciliosScreen() {
           }
 
           Alert.alert(
-            '✅ Agregado a Mesa ' + mesaSeleccionada,
-            `Los productos para llevar se sumaron a la cuenta de la Mesa ${mesaSeleccionada}.\n\n` +
+            '✅ Enviado a Cocina - Mesa ' + mesaSeleccionada,
+            `🍳 Los productos para llevar fueron enviados a cocina para preparación.\n\n` +
             productosSeleccionados.map((p, i) => `${i + 1}. ${p.nombre} (${p.tamano}) x${p.cantidad}`).join('\n') +
             (cantidadIcopores > 0 ? `\n🥡 Icopores: ${cantidadIcopores}x` : '') +
             `\n\n💰 Nuevo total Mesa ${mesaSeleccionada}: $${totalCombinado.toLocaleString('es-CO')}`,

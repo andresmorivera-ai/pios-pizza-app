@@ -24,7 +24,7 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const { usuario, logout } = useAuth();
   const { ordenes } = useOrdenes();
-  const { numeroNequi, numeroDaviplata, guardarNumeros } = useConfig();
+  const { numeroNequi, numeroDaviplata, guardarNumeros, cargarConfiguracion } = useConfig();
   const insets = useSafeAreaInsets();
 
   // Modal states
@@ -84,11 +84,21 @@ export default function HomeScreen() {
 
   // Update temp values when modal opens
   useEffect(() => {
+    const fetchFreshData = async () => {
+      if (modalPagosVisible) {
+        await cargarConfiguracion(); // Recargar de la DB al abrir el modal
+      }
+    };
+    fetchFreshData();
+  }, [modalPagosVisible]);
+
+  // Actualizar temps cuando cambie la global (después de cargar)
+  useEffect(() => {
     if (modalPagosVisible) {
       setTempNequi(numeroNequi);
       setTempDaviplata(numeroDaviplata);
     }
-  }, [modalPagosVisible]);
+  }, [numeroNequi, numeroDaviplata, modalPagosVisible]);
 
   const handleGuardarConfig = async () => {
     await guardarNumeros(tempNequi, tempDaviplata);

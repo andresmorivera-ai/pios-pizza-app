@@ -64,6 +64,7 @@ const MAPPING = {
   'exclamationmark.shield.fill': 'security',
   'arrow.down.to.line': 'south',
   'arrow.up.right.square': 'north-east',
+  'arrow.right.square.fill': 'logout',
 
 } as IconMapping;
 
